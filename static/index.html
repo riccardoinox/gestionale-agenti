@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Gestionale Agenti</title>
+  
+  <!-- PWA & Mobile Optimization -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gestionale">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-icon">G</div>
+      <div class="brand-info">
+        <h1>Gestionale Agenti</h1>
+        <span id="header-sync-status">Ultimo sync: Caricamento...</span>
+      </div>
+    </div>
+
+    <!-- Desktop Navigation -->
+    <nav class="desktop-nav">
+      <button class="nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+        📊 Dashboard
+      </button>
+      <button class="nav-btn" data-tab="clients" onclick="switchTab('clients')">
+        👥 Clienti
+      </button>
+      <button class="nav-btn" data-tab="articles" onclick="switchTab('articles')">
+        📦 Articoli & Listino
+      </button>
+      <button class="nav-btn" data-tab="orders" onclick="switchTab('orders')">
+        📋 Ordini 2026
+      </button>
+    </nav>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <button id="theme-toggle" class="btn btn-secondary btn-icon" title="Cambia tema" onclick="toggleTheme()">
+        🌙
+      </button>
+      <button id="sync-btn" class="btn btn-primary" onclick="triggerSync()">
+        <span id="sync-icon">🔄</span>
+        <span class="desktop-only-text">Sincronizza</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="app-container">
+
+    <!-- Install Banner (Mobile PWA) -->
+    <div id="pwa-install-banner" class="install-banner" style="display: none;">
+      <div>
+        <strong style="font-size: 0.95rem;">Installa l'App sul telefono</strong>
+        <div style="font-size: 0.78rem; opacity: 0.9;">Accedi rapidamente con un tocco dalla schermata home</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="promptInstallPWA()">Installa</button>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB 1: DASHBOARD -->
+    <!-- ============================================================ -->
+    <section id="tab-dashboard" class="tab-content">
+      
+      <!-- Quick Search Bar (Omni-Search) -->
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="omni-search" class="search-input" placeholder="Cerca cliente, articolo o ordine..." oninput="handleOmniSearch(this.value)">
+        <button id="omni-clear" class="search-clear-btn" onclick="clearOmniSearch()">✕</button>
+      </div>
+
+      <!-- Quick Omni-Search Results (Dropdown/List) -->
+      <div id="omni-results" style="display: none; margin-bottom: 20px;">
+        <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 8px; color: var(--text-muted);">RISULTATI RICERCA RAPIDA:</div>
+        <div id="omni-results-list" class="card-list"></div>
+      </div>
+
+      <!-- KPI Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card" onclick="switchTab('clients')">
+          <div class="stat-header">
+            <span class="stat-title">Clienti</span>
+            <div class="stat-icon" style="background: #eff6ff; color: #2563eb;">👥</div>
+          </div>
+          <div id="stat-clients" class="stat-value">-</div>
+          <div class="stat-sub">Anagrafica attiva</div>
+        </div>
+
+        <div class="stat-card" onclick="switchTab('articles')">
+          <div class="stat-header">
+            <span class="stat-title">Articoli</span>
+            <div class="stat-icon" style="background: #f0fdf4; color: #16a34a;">📦</div>
+          </div>
+          <div id="stat-articles" class="stat-value">-</div>
+          <div id="stat-articles-disp" class="stat-sub">- disponibili subito</div>
+        </div>
+
+        <div class="stat-card" onclick="switchTab('orders')">
+          <div class="stat-header">
+            <span class="stat-title">Ordini Da Evadere</span>
+            <div class="stat-icon" style="background: #fffbeb; color: #d97706;">⏳</div>
+          </div>
+          <div id="stat-pending-orders" class="stat-value">-</div>
+          <div id="stat-pending-amount" class="stat-sub">€ - in attesa</div>
+        </div>
+
+        <div class="stat-card" onclick="switchTab('orders')">
+          <div class="stat-header">
+            <span class="stat-title">Totale Ordini '26</span>
+            <div class="stat-icon" style="background: #faf5ff; color: #9333ea;">💶</div>
+          </div>
+          <div id="stat-orders" class="stat-value">-</div>
+          <div id="stat-turnover" class="stat-sub">Volume totale € -</div>
+        </div>
+      </div>
+
+      <!-- Quick Access Section -->
+      <div style="margin-top: 10px;">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">Accessi Rapidi</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+          <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="filterArticlesAndSwitch('available')">
+            🟢 Articoli Disponibili
+          </button>
+          <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="filterArticlesAndSwitch('out_of_stock')">
+            🔴 Articoli Esauriti
+          </button>
+          <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="filterOrdersAndSwitch('N')">
+            ⏳ Ordini Da Evadere
+          </button>
+        </div>
+      </div>
+
+      <!-- Recent Orders Section -->
+      <div style="margin-top: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="font-size: 1rem; font-weight: 700;">Ultimi Ordini Registrati</h3>
+          <a href="javascript:void(0)" onclick="switchTab('orders')" style="font-size: 0.82rem; color: var(--primary); text-decoration: none; font-weight: 600;">Vedi tutti →</a>
+        </div>
+        <div id="dashboard-recent-orders" class="card-list">
+          <div class="loading-spinner">Caricamento ordini...</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 2: CLIENTI -->
+    <!-- ============================================================ -->
+    <section id="tab-clients" class="tab-content" style="display: none;">
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="clients-search" class="search-input" placeholder="Cerca per Ragione Sociale, Città, P.IVA, Codice..." oninput="onClientsSearch(this.value)">
+        <button id="clients-clear" class="search-clear-btn" onclick="clearClientsSearch()">✕</button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span id="clients-count-badge" class="badge badge-gray">0 clienti</span>
+      </div>
+
+      <div id="clients-list" class="card-list">
+        <div class="loading-spinner">Caricamento clienti...</div>
+      </div>
+      
+      <div id="clients-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;"></div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 3: ARTICOLI & LISTINO -->
+    <!-- ============================================================ -->
+    <section id="tab-articles" class="tab-content" style="display: none;">
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="articles-search" class="search-input" placeholder="Cerca Codice Articolo, Descrizione..." oninput="onArticlesSearch(this.value)">
+        <button id="articles-clear" class="search-clear-btn" onclick="clearArticlesSearch()">✕</button>
+      </div>
+
+      <!-- Filter Pills -->
+      <div class="filter-pills">
+        <button class="pill active" data-filter="all" onclick="setArticleFilter('all')">Tutti</button>
+        <button class="pill" data-filter="available" onclick="setArticleFilter('available')">🟢 Disponibili</button>
+        <button class="pill" data-filter="low_stock" onclick="setArticleFilter('low_stock')">🟡 Sottoscorta (≤50)</button>
+        <button class="pill" data-filter="out_of_stock" onclick="setArticleFilter('out_of_stock')">🔴 Esauriti</button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span id="articles-count-badge" class="badge badge-gray">0 articoli</span>
+      </div>
+
+      <div id="articles-list" class="card-list">
+        <div class="loading-spinner">Caricamento articoli...</div>
+      </div>
+
+      <div id="articles-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;"></div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 4: ORDINI -->
+    <!-- ============================================================ -->
+    <section id="tab-orders" class="tab-content" style="display: none;">
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="orders-search" class="search-input" placeholder="Cerca per Cliente, Riferimento, Numero Ordine..." oninput="onOrdersSearch(this.value)">
+        <button id="orders-clear" class="search-clear-btn" onclick="clearOrdersSearch()">✕</button>
+      </div>
+
+      <!-- Filter Pills -->
+      <div class="filter-pills">
+        <button class="pill active" data-order-filter="all" onclick="setOrderFilter('all')">Tutti</button>
+        <button class="pill" data-order-filter="N" onclick="setOrderFilter('N')">⏳ Da Evadere</button>
+        <button class="pill" data-order-filter="S" onclick="setOrderFilter('S')">✅ Evasi</button>
+        <button class="pill" data-order-filter="P" onclick="setOrderFilter('P')">🟡 Parziali</button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span id="orders-count-badge" class="badge badge-gray">0 ordini</span>
+      </div>
+
+      <div id="orders-list" class="card-list">
+        <div class="loading-spinner">Caricamento ordini...</div>
+      </div>
+
+      <div id="orders-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;"></div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: DETTAGLIO CLIENTE -->
+  <!-- ============================================================ -->
+  <div id="modal-client" class="modal-overlay" onclick="closeClientModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <h2 id="modal-client-name" style="font-size: 1.15rem; font-weight: 800;">Ragione Sociale</h2>
+          <span id="modal-client-code" class="badge badge-blue">Codice</span>
+        </div>
+        <button class="modal-close" onclick="closeClientModal()">✕</button>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div id="modal-client-actions" style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;"></div>
+
+      <!-- Details -->
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Città</div>
+          <div id="modal-client-city" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Partita IVA / CF</div>
+          <div id="modal-client-vat" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Telefono</div>
+          <div id="modal-client-phone" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Cellulare</div>
+          <div id="modal-client-mobile" class="detail-value">-</div>
+        </div>
+      </div>
+
+      <!-- Orders Section for this Client -->
+      <div style="margin-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="font-size: 0.95rem; font-weight: 700;">Ordini Anno 2026 (<span id="modal-client-orders-count">0</span>)</h3>
+          <span id="modal-client-orders-total" class="badge badge-green">Tot: € 0,00</span>
+        </div>
+        <div id="modal-client-orders-list" class="card-list">
+          <div class="loading-spinner">Caricamento ordini...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: DETTAGLIO ARTICOLO -->
+  <!-- ============================================================ -->
+  <div id="modal-article" class="modal-overlay" onclick="closeArticleModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span id="modal-art-code" class="badge badge-blue" style="font-size: 0.85rem;">Codice</span>
+          <h2 id="modal-art-desc" style="font-size: 1.1rem; font-weight: 800; margin-top: 4px;">Descrizione Articolo</h2>
+        </div>
+        <button class="modal-close" onclick="closeArticleModal()">✕</button>
+      </div>
+
+      <!-- Pricing Highlight -->
+      <div style="background: linear-gradient(135deg, #1e3a8a, #2563eb); color: white; padding: 16px; border-radius: var(--radius-md); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9;">Prezzo Listino Netto</div>
+          <div id="modal-art-price" style="font-size: 1.6rem; font-weight: 800;">€ 0,00</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9;">Ultimo Costo</div>
+          <div id="modal-art-cost" style="font-size: 1.2rem; font-weight: 700; opacity: 0.95;">€ 0,00</div>
+        </div>
+      </div>
+
+      <!-- Stock Matrix -->
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Disponibilità Netta</div>
+          <div id="modal-art-disp" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Giacenza (Esistenza)</div>
+          <div id="modal-art-esist" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Impegnato Clienti</div>
+          <div id="modal-art-imp" class="detail-value" style="color: var(--danger);">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Ordinato a Fornitori</div>
+          <div id="modal-art-ord" class="detail-value" style="color: var(--primary);">-</div>
+        </div>
+      </div>
+
+      <!-- Secondary Info -->
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Unità di Misura</div>
+          <div id="modal-art-um" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Codice Alternativo</div>
+          <div id="modal-art-alt" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">A Listino</div>
+          <div id="modal-art-alistino" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">In Esaurimento</div>
+          <div id="modal-art-esaurim" class="detail-value">-</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MOBILE BOTTOM NAVIGATION -->
+  <!-- ============================================================ -->
+  <nav class="mobile-nav">
+    <button class="mobile-nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="clients" onclick="switchTab('clients')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Clienti</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="articles" onclick="switchTab('articles')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      <span>Articoli</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="orders" onclick="switchTab('orders')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <span>Ordini</span>
+    </button>
+  </nav>
+
+  <!-- App Javascript -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
