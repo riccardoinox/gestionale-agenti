@@ -61,6 +61,11 @@ def is_excluded_article(code: str) -> bool:
     code_upper = code.strip().upper()
     return any(code_upper.startswith(prefix) for prefix in EXCLUDED_ARTICLE_PREFIXES)
 
+def is_excluded_client(name: str, code: str = "") -> bool:
+    name_clean = str(name or "").strip()
+    code_clean = str(code or "").strip()
+    return name_clean.startswith("$") or code_clean.startswith("$")
+
 def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
     if base_dir is None:
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -118,6 +123,11 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
                 continue
             
             name = safe_str(row[1])
+            
+            # Exclude clients whose name starts with $, $$, $$$ or other test symbols
+            if is_excluded_client(name, code):
+                continue
+
             name2 = safe_str(row[2]) if len(row) > 2 else ""
             city = safe_str(row[3]) if len(row) > 3 else ""
             mobile = safe_str(row[4]) if len(row) > 4 else ""
