@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+gestionale.db
+gestionale.db-wal
+gestionale.db-shm
+cloudflared.exe
+_temp_drive_sync/
+downloads_test/
+LINK_ONLINE.txt

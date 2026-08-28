@@ -44,6 +44,23 @@ def safe_date_iso(val) -> str:
             pass
     return s
 
+EXCLUDED_ARTICLE_PREFIXES = (
+    "BANC",
+    "ESTINTORI",
+    "L430",
+    "LEGGE",
+    "MATD",
+    "PROVA",
+    "SCONTO",
+    "SPE",
+)
+
+def is_excluded_article(code: str) -> bool:
+    if not code:
+        return True
+    code_upper = code.strip().upper()
+    return any(code_upper.startswith(prefix) for prefix in EXCLUDED_ARTICLE_PREFIXES)
+
 def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
     if base_dir is None:
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -79,8 +96,9 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
                 continue
             code = safe_str(row[1])
             if code and code.lower() != "descrizione":
-                price = safe_float(row[8], 0.0)
-                price_map[code.upper()] = price
+                if not is_excluded_article(code):
+                    price = safe_float(row[8], 0.0)
+                    price_map[code.upper()] = price
         wb_list.close()
     print(f"Loaded {len(price_map)} prices from listino.")
 
@@ -139,6 +157,10 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
                 continue
             code = safe_str(row[0])
             if not code or code.lower() == "codice articolo":
+                continue
+            
+            # Filter out internal/excluded article codes
+            if is_excluded_article(code):
                 continue
 
             desc = safe_str(row[1]) if len(row) > 1 else ""

@@ -350,5 +350,5 @@ def serve_sw():
 
 if __name__ == "__main__":
     import uvicorn
-    # Bind to 0.0.0.0 so devices on local Wi-Fi / network can connect directly!
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
