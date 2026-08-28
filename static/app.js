@@ -281,11 +281,11 @@ async function loadDashboardOrders() {
 // SYNCHRONIZATION
 // ==========================================
 async function triggerSync() {
-  const btn = document.getElementById('sync-btn');
-  const icon = document.getElementById('sync-icon');
+  const btn = document.getElementById('admin-sync-btn') || document.getElementById('sync-btn');
+  const icon = document.getElementById('admin-sync-icon') || document.getElementById('sync-icon');
   
-  btn.disabled = true;
-  icon.classList.add('spin');
+  if (btn) btn.disabled = true;
+  if (icon) icon.classList.add('spin');
   showToast('Sincronizzazione in corso da Google Drive...', 'info');
 
   try {
@@ -308,8 +308,8 @@ async function triggerSync() {
   } catch (err) {
     showToast('Errore durante la sincronizzazione', 'error');
   } finally {
-    btn.disabled = false;
-    icon.classList.remove('spin');
+    if (btn) btn.disabled = false;
+    if (icon) icon.classList.remove('spin');
   }
 }
 
