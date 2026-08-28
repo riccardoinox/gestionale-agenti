@@ -500,21 +500,21 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 def serve_root():
     index_file = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_file):
-        return FileResponse(index_file)
+        return FileResponse(index_file, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return {"message": "Gestionale API is running. Place index.html in static folder."}
 
 @app.get("/manifest.json")
 def serve_manifest():
     manifest_file = os.path.join(STATIC_DIR, "manifest.json")
     if os.path.exists(manifest_file):
-        return FileResponse(manifest_file, media_type="application/manifest+json")
+        return FileResponse(manifest_file, media_type="application/manifest+json", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return JSONResponse(content={})
 
 @app.get("/sw.js")
 def serve_sw():
     sw_file = os.path.join(STATIC_DIR, "sw.js")
     if os.path.exists(sw_file):
-        return FileResponse(sw_file, media_type="application/javascript")
+        return FileResponse(sw_file, media_type="application/javascript", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return JSONResponse(content={})
 
 if __name__ == "__main__":
