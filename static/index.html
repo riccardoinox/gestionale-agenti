@@ -22,6 +22,31 @@
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 
+  <!-- ============================================================ -->
+  <!-- LOGIN OVERLAY -->
+  <!-- ============================================================ -->
+  <div id="login-overlay" class="login-overlay" style="display: none;">
+    <div class="login-card">
+      <div class="login-logo">G</div>
+      <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 6px;">Gestionale Agenti</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted);">Inserisci la password per accedere ai dati aziendali</p>
+
+      <form onsubmit="handleLogin(event)">
+        <div class="login-input-group">
+          <input type="password" id="login-password" class="login-input" placeholder="Password di accesso..." autocomplete="current-password" required>
+          <button type="button" class="login-toggle-pwd" onclick="togglePasswordVisibility('login-password')">👁️</button>
+        </div>
+        <div id="login-error" class="login-error">Password errata. Riprova.</div>
+        <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 1rem;">
+          Accedi all'App
+        </button>
+      </form>
+      <div style="margin-top: 14px; font-size: 0.75rem; color: var(--text-muted);">
+        Accesso riservato &bull; Agenti e Amministrazione
+      </div>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="app-header">
     <div class="brand">
@@ -46,6 +71,9 @@
       <button class="nav-btn" data-tab="orders" onclick="switchTab('orders')">
         📋 Ordini 2026
       </button>
+      <button id="nav-btn-admin" class="nav-btn" data-tab="admin" onclick="switchTab('admin')">
+        ⚙️ Gestione Admin
+      </button>
     </nav>
 
     <!-- Header Actions -->
@@ -56,6 +84,9 @@
       <button id="sync-btn" class="btn btn-primary" onclick="triggerSync()">
         <span id="sync-icon">🔄</span>
         <span class="desktop-only-text">Sincronizza</span>
+      </button>
+      <button class="btn btn-secondary btn-icon" title="Esci / Logout" onclick="logout()">
+        🚪
       </button>
     </div>
   </header>
@@ -237,6 +268,113 @@
       <div id="orders-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;"></div>
     </section>
 
+    <!-- ============================================================ -->
+    <!-- TAB 5: AMMINISTRAZIONE & CARICAMENTO EXCEL -->
+    <!-- ============================================================ -->
+    <section id="tab-admin" class="tab-content" style="display: none;">
+      
+      <!-- Direct Excel Upload Card -->
+      <div class="admin-card">
+        <div class="admin-card-title">
+          <span>📁</span>
+          <span>Caricamento Diretto File Excel</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+          Seleziona uno o più file Excel dal tuo computer per aggiornare immediatamente il database (i codici interni verranno automaticamente filtrati).
+        </p>
+
+        <form id="upload-excel-form" onsubmit="handleExcelUpload(event)">
+          <div class="file-drop-grid">
+            <div class="file-drop-box" id="drop-anagra">
+              <input type="file" id="file-anagra" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-anagra', 'ANAGRA')">
+              <div class="file-label-title">👥 Clienti (ANAGRA)</div>
+              <div class="file-label-desc">Trascina o seleziona ANAGRA.xlsx</div>
+              <div class="file-selected-name" id="name-anagra"></div>
+            </div>
+
+            <div class="file-drop-box" id="drop-artico">
+              <input type="file" id="file-artico" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-artico', 'ARTICO')">
+              <div class="file-label-title">📦 Magazzino (ARTICO)</div>
+              <div class="file-label-desc">Trascina o seleziona ARTICO.xlsx</div>
+              <div class="file-selected-name" id="name-artico"></div>
+            </div>
+
+            <div class="file-drop-box" id="drop-seor">
+              <input type="file" id="file-seor" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-seor', 'SEOR')">
+              <div class="file-label-title">📋 Ordini 2026 (SEOR)</div>
+              <div class="file-label-desc">Trascina o seleziona SEOR.xlsx</div>
+              <div class="file-selected-name" id="name-seor"></div>
+            </div>
+
+            <div class="file-drop-box" id="drop-listino">
+              <input type="file" id="file-listino" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-listino', 'LISTINO')">
+              <div class="file-label-title">🏷️ Nuovo Listino Prezzi</div>
+              <div class="file-label-desc">Trascina o seleziona Listino.xlsx</div>
+              <div class="file-selected-name" id="name-listino"></div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button type="submit" id="upload-btn" class="btn btn-primary" style="padding: 10px 20px;">
+              <span id="upload-icon">⬆️</span>
+              <span>Carica ed Elabora File Selezionati</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="resetFileSelections()">
+              Azzera Selezione
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Password Management Card -->
+      <div class="admin-card">
+        <div class="admin-card-title">
+          <span>🔐</span>
+          <span>Gestione Password di Accesso</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+          Modifica la password con cui accedono i colleghi/agenti o la tua password di amministratore.
+        </p>
+
+        <form onsubmit="handlePasswordChange(event)" style="max-width: 500px;">
+          <div class="form-group">
+            <label class="form-label">Password Generale App (per Agenti e Colleghi)</label>
+            <div style="position: relative;">
+              <input type="password" id="input-new-app-pwd" class="form-input" placeholder="Nuova password agenti..." required>
+              <button type="button" class="login-toggle-pwd" onclick="togglePasswordVisibility('input-new-app-pwd')">👁️</button>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+              Password attuale: <strong id="current-app-pwd-display">-</strong>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 18px;">
+            <label class="form-label">Password Amministratore (per questa schermata)</label>
+            <div style="position: relative;">
+              <input type="password" id="input-new-admin-pwd" class="form-input" placeholder="Lascia vuoto per non cambiare...">
+              <button type="button" class="login-toggle-pwd" onclick="togglePasswordVisibility('input-new-admin-pwd')">👁️</button>
+            </div>
+          </div>
+
+          <button type="submit" id="pwd-save-btn" class="btn btn-primary" style="margin-top: 10px; padding: 10px 20px;">
+            💾 Salva Nuove Password
+          </button>
+        </form>
+      </div>
+
+      <!-- Sync Logs Card -->
+      <div class="admin-card">
+        <div class="admin-card-title">
+          <span>📜</span>
+          <span>Storico Aggiornamenti e Sincronizzazioni</span>
+        </div>
+        <div id="admin-sync-logs" class="card-list">
+          <div class="loading-spinner">Caricamento log...</div>
+        </div>
+      </div>
+
+    </section>
+
   </main>
 
   <!-- ============================================================ -->
@@ -375,6 +513,10 @@
     <button class="mobile-nav-item" data-tab="orders" onclick="switchTab('orders')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
       <span>Ordini</span>
+    </button>
+    <button id="mobile-nav-admin" class="mobile-nav-item" data-tab="admin" onclick="switchTab('admin')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Admin</span>
     </button>
   </nav>
 

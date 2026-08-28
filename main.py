@@ -1,15 +1,17 @@
 import os
 import sqlite3
-from typing import Optional, List
-from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
+import hashlib
+import shutil
+from typing import Optional, List, Dict, Any
+from fastapi import FastAPI, Query, HTTPException, BackgroundTasks, Header, UploadFile, File, Form, Depends, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from database import get_db_connection, init_db
+from database import get_db_connection, init_db, get_setting, set_setting
 from drive_sync import sync_from_google_drive
 from excel_importer import import_all_excel_data
 
-app = FastAPI(title="Gestionale Agenti Web App", version="1.0.0")
+app = FastAPI(title="Gestionale Agenti Web App", version="1.1.0")
 
 # Enable CORS for local testing and mobile access
 app.add_middleware(
@@ -25,6 +27,49 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 # Make sure static directory exists
 os.makedirs(STATIC_DIR, exist_ok=True)
+
+# -------------------------------------------------------------
+# AUTHENTICATION & SECURITY HELPERS
+# -------------------------------------------------------------
+SALT = "gestionale_inoxtubi_secure_salt_2026"
+
+def hash_secret(secret: str) -> str:
+    return hashlib.sha256(f"{secret}:{SALT}".encode("utf-8")).hexdigest()
+
+def generate_token(role: str, secret: str) -> str:
+    h = hash_secret(f"{role}:{secret}")
+    return f"{role}:{h}"
+
+def verify_token(token: Optional[str]) -> Optional[str]:
+    if not token or ":" not in token:
+        return None
+    try:
+        role, h = token.split(":", 1)
+        if role == "admin":
+            admin_pwd = get_setting("admin_password", "admin2026")
+            expected_h = hash_secret(f"admin:{admin_pwd}")
+            if h == expected_h:
+                return "admin"
+        elif role == "user":
+            app_pwd = get_setting("app_password", "inoxtubi2026")
+            expected_h = hash_secret(f"user:{app_pwd}")
+            if h == expected_h:
+                return "user"
+    except Exception:
+        pass
+    return None
+
+def require_auth(x_app_token: Optional[str] = Header(None)) -> str:
+    role = verify_token(x_app_token)
+    if not role:
+        raise HTTPException(status_code=401, detail="Accesso non autorizzato. Password non valida.")
+    return role
+
+def require_admin(x_app_token: Optional[str] = Header(None)) -> str:
+    role = verify_token(x_app_token)
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Accesso riservato all'amministratore.")
+    return role
 
 # Startup event: Initialize DB and do initial import if DB is empty
 @app.on_event("startup")
@@ -43,8 +88,129 @@ def on_startup():
         except Exception as e:
             print(f"Initial sync warning: {e}")
 
+# -------------------------------------------------------------
+# AUTH & ADMIN ENDPOINTS
+# -------------------------------------------------------------
+@app.post("/api/auth/login")
+def login(payload: Dict[str, str]):
+    password = payload.get("password", "").strip()
+    if not password:
+        raise HTTPException(status_code=400, detail="Password richiesta")
+
+    admin_pwd = get_setting("admin_password", "admin2026")
+    app_pwd = get_setting("app_password", "inoxtubi2026")
+
+    if password == admin_pwd:
+        token = generate_token("admin", admin_pwd)
+        return {"authenticated": True, "role": "admin", "token": token}
+    elif password == app_pwd:
+        token = generate_token("user", app_pwd)
+        return {"authenticated": True, "role": "user", "token": token}
+    else:
+        raise HTTPException(status_code=401, detail="Password errata.")
+
+@app.get("/api/auth/check")
+def check_auth(x_app_token: Optional[str] = Header(None)):
+    role = verify_token(x_app_token)
+    if role:
+        return {"authenticated": True, "role": role}
+    return {"authenticated": False, "role": None}
+
+@app.get("/api/admin/settings")
+def get_admin_settings(role: str = Depends(require_admin)):
+    app_pwd = get_setting("app_password", "inoxtubi2026")
+    return {
+        "app_password": app_pwd,
+        "admin_password_set": True,
+        "drive_folder_url": get_setting("drive_folder_url", "https://drive.google.com/drive/folders/1IpEMQjuEiRjJ19bpvjo8Ql7qH_Qcnl0Y")
+    }
+
+@app.post("/api/admin/change-passwords")
+def change_passwords(payload: Dict[str, str], role: str = Depends(require_admin)):
+    new_app_pwd = payload.get("app_password", "").strip()
+    new_admin_pwd = payload.get("admin_password", "").strip()
+
+    if new_app_pwd:
+        set_setting("app_password", new_app_pwd)
+    if new_admin_pwd:
+        set_setting("admin_password", new_admin_pwd)
+
+    # Return new admin token if admin password changed
+    current_admin_pwd = new_admin_pwd if new_admin_pwd else get_setting("admin_password", "admin2026")
+    new_token = generate_token("admin", current_admin_pwd)
+
+    return {
+        "status": "success",
+        "message": "Password aggiornate con successo!",
+        "token": new_token
+    }
+
+@app.post("/api/admin/upload-excel")
+async def upload_excel_files(
+    files: List[UploadFile] = File(...),
+    role: str = Depends(require_admin)
+):
+    """Direct Excel upload for Admin: updates Excel files and re-imports database."""
+    uploaded_names = []
+    
+    for file in files:
+        fname = file.filename
+        fname_lower = fname.lower()
+        
+        # Identify target standard filename
+        target_name = fname
+        if "anagra" in fname_lower:
+            target_name = "ANAGRA.xlsx"
+        elif "artico" in fname_lower:
+            target_name = "ARTICO.xlsx"
+        elif "seor" in fname_lower:
+            target_name = "SEOR.xlsx"
+        elif "listino" in fname_lower:
+            target_name = "NUOVO LISTINO server ver.05.2026.xlsx"
+            
+        target_path = os.path.join(BASE_DIR, target_name)
+        
+        content = await file.read()
+        with open(target_path, "wb") as f:
+            f.write(content)
+        uploaded_names.append(target_name)
+
+    # Trigger re-import
+    try:
+        import_res = import_all_excel_data(BASE_DIR)
+        
+        # Log to DB
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO sync_logs (source, status, total_clients, total_articles, total_orders, total_prices, details)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            "Caricamento Manuale Admin",
+            "SUCCESS",
+            import_res["clients"],
+            import_res["articles"],
+            import_res["orders"],
+            import_res["prices"],
+            f"Caricati {len(uploaded_names)} file: {', '.join(uploaded_names)}"
+        ))
+        conn.commit()
+        conn.close()
+
+        return {
+            "status": "success",
+            "message": f"Caricati ed elaborati {len(uploaded_names)} file con successo!",
+            "files": uploaded_names,
+            "import_results": import_res
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Errore durante l'elaborazione dei file: {str(e)}")
+
+# -------------------------------------------------------------
+# APPLICATION DATA ENDPOINTS (AUTHENTICATED)
+# -------------------------------------------------------------
 @app.get("/api/stats")
-def get_stats():
+def get_stats(role: str = Depends(require_auth)):
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -90,7 +256,7 @@ def get_stats():
     }
 
 @app.post("/api/sync")
-def trigger_sync():
+def trigger_sync(role: str = Depends(require_auth)):
     """Trigger synchronization from Google Drive with local fallback."""
     res = sync_from_google_drive(base_dir=BASE_DIR)
     return res
@@ -100,7 +266,8 @@ def get_clients(
     q: Optional[str] = Query(None, description="Search term for name, code, city, vat"),
     city: Optional[str] = Query(None, description="Filter by city"),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    role: str = Depends(require_auth)
 ):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -152,7 +319,7 @@ def get_clients(
     }
 
 @app.get("/api/clients/{code}")
-def get_client_detail(code: str):
+def get_client_detail(code: str, role: str = Depends(require_auth)):
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -195,7 +362,8 @@ def get_articles(
     stock_filter: Optional[str] = Query("all", description="all, available, low_stock, out_of_stock"),
     has_price: Optional[bool] = Query(None, description="Filter articles with list price > 0"),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    role: str = Depends(require_auth)
 ):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -246,7 +414,7 @@ def get_articles(
     }
 
 @app.get("/api/articles/{code:path}")
-def get_article_detail(code: str):
+def get_article_detail(code: str, role: str = Depends(require_auth)):
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -267,7 +435,8 @@ def get_orders(
     evaso: Optional[str] = Query("all", description="all, N (da evadere), S (evaso), P (parziale)"),
     client_code: Optional[str] = Query(None, description="Filter by client code"),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
+    role: str = Depends(require_auth)
 ):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -316,7 +485,7 @@ def get_orders(
     }
 
 @app.get("/api/sync/logs")
-def get_sync_logs(limit: int = 10):
+def get_sync_logs(limit: int = 10, role: str = Depends(require_auth)):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM sync_logs ORDER BY id DESC LIMIT ?", (limit,))

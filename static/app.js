@@ -1,12 +1,35 @@
 // State Management
 let currentTab = 'dashboard';
 let debounceTimer = null;
+let currentRole = null;
 
 let clientsState = { q: '', offset: 0, limit: 30, total: 0 };
 let articlesState = { q: '', stock_filter: 'all', offset: 0, limit: 30, total: 0 };
 let ordersState = { q: '', evaso: 'all', offset: 0, limit: 30, total: 0 };
 
 let deferredPrompt = null;
+
+const AUTH_TOKEN_KEY = 'gestionale_auth_token';
+const AUTH_ROLE_KEY = 'gestionale_auth_role';
+
+// Helper for Authenticated Requests
+async function authFetch(url, options = {}) {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+  const headers = options.headers || {};
+  
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  }
+  headers['X-App-Token'] = token;
+  options.headers = headers;
+
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    showLoginOverlay();
+    throw new Error('Sessione scaduta o non autorizzata');
+  }
+  return res;
+}
 
 // Helpers
 function formatCurrency(val) {
@@ -50,7 +73,119 @@ function showToast(message, type = 'info') {
   }, 3500);
 }
 
-// Tab Switching
+// ==========================================
+// AUTHENTICATION & LOGIN
+// ==========================================
+function showLoginOverlay() {
+  document.getElementById('login-overlay').style.display = 'flex';
+  const pwdInput = document.getElementById('login-password');
+  if (pwdInput) {
+    pwdInput.value = '';
+    pwdInput.focus();
+  }
+  document.getElementById('login-error').style.display = 'none';
+}
+
+function hideLoginOverlay() {
+  document.getElementById('login-overlay').style.display = 'none';
+}
+
+function togglePasswordVisibility(inputId) {
+  const input = document.getElementById(inputId);
+  if (input) {
+    input.type = input.type === 'password' ? 'text' : 'password';
+  }
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const pwd = document.getElementById('login-password').value.trim();
+  const errorEl = document.getElementById('login-error');
+  const submitBtn = document.getElementById('login-submit-btn');
+
+  if (!pwd) return;
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Verifica in corso...';
+  errorEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.authenticated) {
+      localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      localStorage.setItem(AUTH_ROLE_KEY, data.role);
+      currentRole = data.role;
+      hideLoginOverlay();
+      updateRoleUI();
+      showToast(data.role === 'admin' ? 'Benvenuto Amministratore!' : 'Accesso effettuato con successo!', 'success');
+      fetchStats();
+      loadDashboardOrders();
+    } else {
+      errorEl.textContent = data.detail || 'Password errata. Riprova.';
+      errorEl.style.display = 'block';
+    }
+  } catch (err) {
+    errorEl.textContent = 'Errore di connessione. Riprova.';
+    errorEl.style.display = 'block';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Accedi all'App";
+  }
+}
+
+function logout() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(AUTH_ROLE_KEY);
+  currentRole = null;
+  showLoginOverlay();
+  showToast('Disconnessione effettuata.', 'info');
+}
+
+function updateRoleUI() {
+  const isAdmin = currentRole === 'admin';
+  const navAdmin = document.getElementById('nav-btn-admin');
+  const mobileNavAdmin = document.getElementById('mobile-nav-admin');
+
+  if (navAdmin) navAdmin.style.display = isAdmin ? 'inline-flex' : 'none';
+  if (mobileNavAdmin) mobileNavAdmin.style.display = isAdmin ? 'flex' : 'none';
+}
+
+async function checkAuthAndInit() {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  if (!token) {
+    showLoginOverlay();
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/auth/check', {
+      headers: { 'X-App-Token': token }
+    });
+    const data = await res.json();
+
+    if (res.ok && data.authenticated) {
+      currentRole = data.role;
+      hideLoginOverlay();
+      updateRoleUI();
+      fetchStats();
+      loadDashboardOrders();
+    } else {
+      showLoginOverlay();
+    }
+  } catch (err) {
+    showLoginOverlay();
+  }
+}
+
+// ==========================================
+// TAB SWITCHING
+// ==========================================
 function switchTab(tabId) {
   currentTab = tabId;
   
@@ -81,6 +216,9 @@ function switchTab(tabId) {
     if (articlesState.total === 0) fetchArticles();
   } else if (tabId === 'orders') {
     if (ordersState.total === 0) fetchOrders();
+  } else if (tabId === 'admin') {
+    loadAdminSettings();
+    loadAdminLogs();
   }
 }
 
@@ -104,7 +242,7 @@ function toggleTheme() {
 // ==========================================
 async function fetchStats() {
   try {
-    const res = await fetch('/api/stats');
+    const res = await authFetch('/api/stats');
     const data = await res.json();
 
     document.getElementById('stat-clients').textContent = formatNumber(data.clients_count);
@@ -126,7 +264,7 @@ async function fetchStats() {
 async function loadDashboardOrders() {
   const container = document.getElementById('dashboard-recent-orders');
   try {
-    const res = await fetch('/api/orders?limit=6');
+    const res = await authFetch('/api/orders?limit=6');
     const data = await res.json();
     if (!data.items || data.items.length === 0) {
       container.innerHTML = '<div class="empty-state">Nessun ordine recente</div>';
@@ -151,24 +289,24 @@ async function triggerSync() {
   showToast('Sincronizzazione in corso da Google Drive...', 'info');
 
   try {
-    const res = await fetch('/api/sync', { method: 'POST' });
+    const res = await authFetch('/api/sync', { method: 'POST' });
     const data = await res.json();
 
     if (data.status === 'success' || data.drive_success) {
       showToast(`Aggiornato! ${data.clients} clienti, ${data.articles} articoli, ${data.orders} ordini`, 'success');
     } else {
-      showToast(`Sync parziale (File locali): ${data.clients} clienti caricati`, 'warning');
+      showToast(`Sync completato: ${data.clients} clienti caricati`, 'warning');
     }
 
-    // Refresh active data
     fetchStats();
     if (currentTab === 'clients') fetchClients();
     if (currentTab === 'articles') fetchArticles();
     if (currentTab === 'orders') fetchOrders();
     if (currentTab === 'dashboard') loadDashboardOrders();
+    if (currentTab === 'admin') loadAdminLogs();
 
   } catch (err) {
-    showToast('Errore di connessione durante la sincronizzazione', 'error');
+    showToast('Errore durante la sincronizzazione', 'error');
   } finally {
     btn.disabled = false;
     icon.classList.remove('spin');
@@ -192,8 +330,8 @@ function handleOmniSearch(val) {
     const q = encodeURIComponent(val.trim());
     try {
       const [resClients, resArticles] = await Promise.all([
-        fetch(`/api/clients?q=${q}&limit=4`).then(r => r.json()),
-        fetch(`/api/articles?q=${q}&limit=4`).then(r => r.json())
+        authFetch(`/api/clients?q=${q}&limit=4`).then(r => r.json()),
+        authFetch(`/api/articles?q=${q}&limit=4`).then(r => r.json())
       ]);
 
       const list = document.getElementById('omni-results-list');
@@ -259,7 +397,7 @@ async function fetchClients() {
 
   try {
     const qParam = clientsState.q ? `&q=${encodeURIComponent(clientsState.q)}` : '';
-    const res = await fetch(`/api/clients?limit=${clientsState.limit}&offset=${clientsState.offset}${qParam}`);
+    const res = await authFetch(`/api/clients?limit=${clientsState.limit}&offset=${clientsState.offset}${qParam}`);
     const data = await res.json();
 
     clientsState.total = data.total;
@@ -332,7 +470,7 @@ async function openClientDetail(code) {
   document.getElementById('modal-client-orders-list').innerHTML = '<div class="loading-spinner">Caricamento ordini...</div>';
 
   try {
-    const res = await fetch(`/api/clients/${code}`);
+    const res = await authFetch(`/api/clients/${code}`);
     const data = await res.json();
     const c = data.client;
 
@@ -343,7 +481,6 @@ async function openClientDetail(code) {
     document.getElementById('modal-client-phone').textContent = c.phone || '-';
     document.getElementById('modal-client-mobile').textContent = c.mobile || '-';
 
-    // Action buttons in modal
     let actionButtons = '';
     if (c.phone || c.mobile) {
       const p = c.mobile || c.phone;
@@ -357,7 +494,6 @@ async function openClientDetail(code) {
     }
     document.getElementById('modal-client-actions').innerHTML = actionButtons;
 
-    // Render orders
     document.getElementById('modal-client-orders-count').textContent = data.summary.total_orders;
     document.getElementById('modal-client-orders-total').textContent = `Tot: ${formatCurrency(data.summary.total_amount)}`;
 
@@ -439,7 +575,7 @@ async function fetchArticles() {
   try {
     const qParam = articlesState.q ? `&q=${encodeURIComponent(articlesState.q)}` : '';
     const filterParam = `&stock_filter=${articlesState.stock_filter}`;
-    const res = await fetch(`/api/articles?limit=${articlesState.limit}&offset=${articlesState.offset}${qParam}${filterParam}`);
+    const res = await authFetch(`/api/articles?limit=${articlesState.limit}&offset=${articlesState.offset}${qParam}${filterParam}`);
     const data = await res.json();
 
     articlesState.total = data.total;
@@ -469,10 +605,6 @@ function renderArticleCardHtml(article) {
     ? `<span class="badge badge-green">Disp: ${formatNumber(disp)} ${article.um}</span>`
     : `<span class="badge badge-red">Esaurito (${formatNumber(disp)})</span>`;
 
-  const priceBadge = article.listino_prezzo > 0
-    ? `<span class="badge badge-blue" style="font-size:0.8rem;">Listino: ${formatCurrency(article.listino_prezzo)}</span>`
-    : '';
-
   return `
     <div class="item-card" onclick="openArticleDetail('${encodeURIComponent(article.code)}')">
       <div class="card-top">
@@ -501,7 +633,7 @@ async function openArticleDetail(encodedCode) {
   modal.classList.add('active');
 
   try {
-    const res = await fetch(`/api/articles/${encodedCode}`);
+    const res = await authFetch(`/api/articles/${encodedCode}`);
     const art = await res.json();
 
     document.getElementById('modal-art-code').textContent = art.code;
@@ -577,7 +709,7 @@ async function fetchOrders() {
   try {
     const qParam = ordersState.q ? `&q=${encodeURIComponent(ordersState.q)}` : '';
     const filterParam = `&evaso=${ordersState.evaso}`;
-    const res = await fetch(`/api/orders?limit=${ordersState.limit}&offset=${ordersState.offset}${qParam}${filterParam}`);
+    const res = await authFetch(`/api/orders?limit=${ordersState.limit}&offset=${ordersState.offset}${qParam}${filterParam}`);
     const data = await res.json();
 
     ordersState.total = data.total;
@@ -631,6 +763,165 @@ function renderOrderCardHtml(order) {
       </div>
     </div>
   `;
+}
+
+// ==========================================
+// ADMIN PANEL LOGIC
+// ==========================================
+function updateFileSelection(input, dropBoxId, label) {
+  const dropBox = document.getElementById(dropBoxId);
+  const nameEl = document.getElementById(`name-${label.toLowerCase()}`);
+  if (input.files && input.files[0]) {
+    dropBox.classList.add('has-file');
+    nameEl.textContent = `✓ ${input.files[0].name}`;
+  } else {
+    dropBox.classList.remove('has-file');
+    nameEl.textContent = '';
+  }
+}
+
+function resetFileSelections() {
+  ['anagra', 'artico', 'seor', 'listino'].forEach(key => {
+    const input = document.getElementById(`file-${key}`);
+    const dropBox = document.getElementById(`drop-${key}`);
+    const nameEl = document.getElementById(`name-${key}`);
+    if (input) input.value = '';
+    if (dropBox) dropBox.classList.remove('has-file');
+    if (nameEl) nameEl.textContent = '';
+  });
+}
+
+async function handleExcelUpload(e) {
+  e.preventDefault();
+  const inputs = ['file-anagra', 'file-artico', 'file-seor', 'file-listino'];
+  const formData = new FormData();
+  let fileCount = 0;
+
+  inputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.files && el.files[0]) {
+      formData.append('files', el.files[0]);
+      fileCount++;
+    }
+  });
+
+  if (fileCount === 0) {
+    showToast('Seleziona almeno un file Excel da caricare!', 'warning');
+    return;
+  }
+
+  const uploadBtn = document.getElementById('upload-btn');
+  const uploadIcon = document.getElementById('upload-icon');
+  uploadBtn.disabled = true;
+  uploadIcon.classList.add('spin');
+  showToast(`Caricamento ed elaborazione di ${fileCount} file in corso...`, 'info');
+
+  try {
+    const res = await authFetch('/api/admin/upload-excel', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+
+    if (res.ok && data.status === 'success') {
+      showToast(data.message, 'success');
+      resetFileSelections();
+      fetchStats();
+      loadAdminLogs();
+    } else {
+      showToast(data.detail || "Errore durante l'elaborazione dei file", 'error');
+    }
+  } catch (err) {
+    showToast('Errore durante il caricamento', 'error');
+  } finally {
+    uploadBtn.disabled = false;
+    uploadIcon.classList.remove('spin');
+  }
+}
+
+async function loadAdminSettings() {
+  try {
+    const res = await authFetch('/api/admin/settings');
+    const data = await res.json();
+    if (data.app_password) {
+      document.getElementById('current-app-pwd-display').textContent = data.app_password;
+      document.getElementById('input-new-app-pwd').value = data.app_password;
+    }
+  } catch (err) {
+    console.error('Error loading admin settings:', err);
+  }
+}
+
+async function handlePasswordChange(e) {
+  e.preventDefault();
+  const newAppPwd = document.getElementById('input-new-app-pwd').value.trim();
+  const newAdminPwd = document.getElementById('input-new-admin-pwd').value.trim();
+
+  if (!newAppPwd && !newAdminPwd) {
+    showToast('Inserisci almeno una nuova password!', 'warning');
+    return;
+  }
+
+  const saveBtn = document.getElementById('pwd-save-btn');
+  saveBtn.disabled = true;
+
+  try {
+    const res = await authFetch('/api/admin/change-passwords', {
+      method: 'POST',
+      body: JSON.stringify({
+        app_password: newAppPwd,
+        admin_password: newAdminPwd
+      })
+    });
+    const data = await res.json();
+
+    if (res.ok && data.status === 'success') {
+      showToast('Password aggiornate con successo!', 'success');
+      if (data.token) {
+        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      }
+      loadAdminSettings();
+      document.getElementById('input-new-admin-pwd').value = '';
+    } else {
+      showToast(data.detail || 'Errore durante il salvataggio', 'error');
+    }
+  } catch (err) {
+    showToast('Errore di connessione', 'error');
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
+async function loadAdminLogs() {
+  const container = document.getElementById('admin-sync-logs');
+  if (!container) return;
+
+  try {
+    const res = await authFetch('/api/sync/logs?limit=8');
+    const logs = await res.json();
+
+    if (!logs || logs.length === 0) {
+      container.innerHTML = '<div class="empty-state" style="padding: 16px;">Nessun log disponibile</div>';
+      return;
+    }
+
+    container.innerHTML = logs.map(l => `
+      <div class="order-mini-card">
+        <div>
+          <div style="font-weight: 700; font-size: 0.88rem;">${l.source} &bull; <span style="font-size:0.75rem; color:var(--text-muted);">${l.timestamp}</span></div>
+          <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">${l.details || ''}</div>
+        </div>
+        <div style="text-align: right;">
+          <span class="badge ${l.status === 'SUCCESS' ? 'badge-green' : 'badge-yellow'}">${l.status}</span>
+          <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 3px;">
+            ${formatNumber(l.total_clients)} cli &bull; ${formatNumber(l.total_articles)} art
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state" style="padding: 16px;">Errore nel caricamento log</div>';
+  }
 }
 
 // ==========================================
@@ -709,6 +1000,5 @@ if ('serviceWorker' in navigator) {
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
-  fetchStats();
-  loadDashboardOrders();
+  checkAuthAndInit();
 });

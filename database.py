@@ -102,6 +102,19 @@ def init_db():
     )
     """)
 
+    # Settings table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # Seed default passwords if not set
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('app_password', 'inoxtubi2026')")
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_password', 'admin2026')")
+
     # Create indexes for ultra fast search
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_city ON clients(city)")
@@ -112,6 +125,24 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(order_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_evaso ON orders(evaso)")
 
+    conn.commit()
+    conn.close()
+
+def get_setting(key: str, default: str = "") -> str:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["value"] if row else default
+
+def set_setting(key: str, value: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+    """, (key, value))
     conn.commit()
     conn.close()
 
