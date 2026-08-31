@@ -8,7 +8,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from database import get_db_connection, init_db, get_setting, set_setting
-from drive_sync import sync_from_google_drive
 from excel_importer import import_all_excel_data
 
 app = FastAPI(title="Gestionale Agenti Web App", version="1.1.0")
@@ -33,36 +32,34 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 # -------------------------------------------------------------
 SALT = "gestionale_inoxtubi_secure_salt_2026"
 
-def hash_secret(secret: str) -> str:
-    return hashlib.sha256(f"{secret}:{SALT}".encode("utf-8")).hexdigest()
-
-def generate_token(role: str, secret: str) -> str:
-    h = hash_secret(f"{role}:{secret}")
-    return f"{role}:{h}"
+def generate_token(role: str, password_secret: str) -> str:
+    """Generate deterministic secure signature for session token."""
+    raw = f"{role}:{password_secret}:{SALT}"
+    sig = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"{role}:{sig}"
 
 def verify_token(token: Optional[str]) -> Optional[str]:
+    """Verifies if token matches current active app or admin password."""
     if not token or ":" not in token:
         return None
-    try:
-        role, h = token.split(":", 1)
-        if role == "admin":
-            admin_pwd = get_setting("admin_password", "admin2026")
-            expected_h = hash_secret(f"admin:{admin_pwd}")
-            if h == expected_h:
-                return "admin"
-        elif role == "user":
-            app_pwd = get_setting("app_password", "inoxtubi2026")
-            expected_h = hash_secret(f"user:{app_pwd}")
-            if h == expected_h:
-                return "user"
-    except Exception:
-        pass
+    role, _ = token.split(":", 1)
+    
+    if role == "admin":
+        admin_pwd = get_setting("admin_password", "admin2026")
+        expected = generate_token("admin", admin_pwd)
+        if token == expected:
+            return "admin"
+    elif role == "user":
+        app_pwd = get_setting("app_password", "inoxtubi2026")
+        expected = generate_token("user", app_pwd)
+        if token == expected:
+            return "user"
     return None
 
 def require_auth(x_app_token: Optional[str] = Header(None)) -> str:
     role = verify_token(x_app_token)
     if not role:
-        raise HTTPException(status_code=401, detail="Accesso non autorizzato. Password non valida.")
+        raise HTTPException(status_code=401, detail="Accesso non autorizzato o sessione scaduta.")
     return role
 
 def require_admin(x_app_token: Optional[str] = Header(None)) -> str:
@@ -82,11 +79,11 @@ def on_startup():
     conn.close()
 
     if clients_count == 0:
-        print("Database is empty. Running initial sync from Google Drive / Excel files...")
+        print("Database is empty. Importing bundled Excel files...")
         try:
-            sync_from_google_drive(base_dir=BASE_DIR)
+            import_all_excel_data(base_dir=BASE_DIR)
         except Exception as e:
-            print(f"Initial sync warning: {e}")
+            print(f"Initial import warning: {e}")
 
 # -------------------------------------------------------------
 # AUTH & ADMIN ENDPOINTS
@@ -121,8 +118,7 @@ def get_admin_settings(role: str = Depends(require_admin)):
     app_pwd = get_setting("app_password", "inoxtubi2026")
     return {
         "app_password": app_pwd,
-        "admin_password_set": True,
-        "drive_folder_url": get_setting("drive_folder_url", "https://drive.google.com/drive/folders/1IpEMQjuEiRjJ19bpvjo8Ql7qH_Qcnl0Y")
+        "admin_password_set": True
     }
 
 @app.post("/api/admin/change-passwords")
@@ -256,9 +252,9 @@ def get_stats(role: str = Depends(require_auth)):
     }
 
 @app.post("/api/sync")
-def trigger_sync(role: str = Depends(require_auth)):
-    """Trigger synchronization from Google Drive with local fallback."""
-    res = sync_from_google_drive(base_dir=BASE_DIR)
+def trigger_sync(role: str = Depends(require_admin)):
+    """Re-import current Excel files."""
+    res = import_all_excel_data(base_dir=BASE_DIR)
     return res
 
 @app.get("/api/clients")

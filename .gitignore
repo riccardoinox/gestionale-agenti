@@ -6,7 +6,6 @@ __pycache__/
 env/
 venv/
 .venv/
-gestionale.db
 gestionale.db-wal
 gestionale.db-shm
 cloudflared.exe
