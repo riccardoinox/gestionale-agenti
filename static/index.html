@@ -15,7 +15,7 @@
   <link rel="icon" type="image/png" href="/static/favicon.png">
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/static/style.css?v=3.0">
+  <link rel="stylesheet" href="/static/style.css?v=3.5">
 </head>
 <body>
 
@@ -27,8 +27,10 @@
   <!-- ============================================================ -->
   <div id="login-overlay" class="login-overlay" style="display: none;">
     <div class="login-card">
-      <div class="login-logo">G</div>
-      <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 6px;">Gestionale Agenti</h2>
+      <div class="login-logo-container">
+        <img src="/static/logo.png" alt="Inoxtubi Padova" class="login-logo-img">
+      </div>
+      <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 4px; color: var(--primary);">Gestionale Agenti</h2>
       <p style="font-size: 0.85rem; color: var(--text-muted);">Inserisci la password per accedere ai dati aziendali</p>
 
       <form onsubmit="handleLogin(event)">
@@ -50,9 +52,9 @@
   <!-- Header -->
   <header class="app-header">
     <div class="brand">
-      <div class="brand-icon">G</div>
+      <img src="/static/logo.png" alt="Inoxtubi Padova" class="brand-logo-img">
       <div class="brand-info">
-        <h1>Gestionale Agenti</h1>
+        <span class="brand-badge">Area Agenti</span>
         <span id="header-sync-status">Ultimo sync: Caricamento...</span>
       </div>
     </div>
@@ -517,6 +519,6 @@
   </nav>
 
   <!-- App Javascript -->
-  <script src="/static/app.js?v=3.0"></script>
+  <script src="/static/app.js?v=3.5"></script>
 </body>
 </html>

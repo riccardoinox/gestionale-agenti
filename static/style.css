@@ -1,8 +1,8 @@
 /* Modern CSS Design System for Gestionale Agenti Mobile-First */
 :root {
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-light: #eff6ff;
+  --primary: #005691;
+  --primary-hover: #004170;
+  --primary-light: #f0f7fc;
   --bg-main: #f8fafc;
   --bg-card: #ffffff;
   --border: #e2e8f0;
@@ -28,7 +28,7 @@
   --border: #334155;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
-  --primary-light: #1e3a8a;
+  --primary-light: #0c2646;
   --success-bg: #064e3b;
   --warning-bg: #78350f;
   --danger-bg: #7f1d1d;
@@ -78,31 +78,40 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
-.brand-icon {
-  width: 38px;
+.brand-logo-img {
   height: 38px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  max-width: 180px;
+  object-fit: contain;
+  background: #ffffff;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.brand-info {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-badge {
+  font-size: 0.72rem;
   font-weight: 800;
-  font-size: 1.2rem;
-  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
+  background: #e0f2fe;
+  color: #005691;
+  padding: 2px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  width: fit-content;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.brand-info h1 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.brand-info span {
-  font-size: 0.75rem;
+.brand-info span#header-sync-status {
+  font-size: 0.72rem;
   color: var(--text-muted);
 }
 
@@ -769,19 +778,22 @@ body {
   animation: fadeIn 0.3s ease-out;
 }
 
-.login-logo {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 16px auto;
+.login-logo-container {
+  background: #ffffff;
+  padding: 14px 20px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  font-size: 2rem;
-  font-weight: 800;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  margin: 0 auto 16px auto;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0, 86, 145, 0.08);
+}
+
+.login-logo-img {
+  height: 48px;
+  max-width: 240px;
+  object-fit: contain;
 }
 
 .login-input-group {
