@@ -764,6 +764,8 @@ async function openArticleDetail(encodedCode) {
   const code = decodeURIComponent(encodedCode);
   setElText('modal-art-code', code);
   setElText('modal-art-desc', 'Caricamento articolo...');
+  setElText('modal-art-price', '...');
+  setElText('modal-art-cost', '...');
 
   try {
     const res = await authFetch(`/api/articles/${encodedCode}`);
