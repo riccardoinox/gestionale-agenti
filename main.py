@@ -430,6 +430,7 @@ def get_client_detail(code: str, role: str = Depends(require_auth)):
 def get_transports(
     q: Optional[str] = Query(None, description="Search client, city, carrier, notes"),
     date_filter: Optional[str] = Query("all", description="all, today, upcoming, past"),
+    exact_date: Optional[str] = Query(None, description="Filter by exact date (YYYY-MM-DD)"),
     province: Optional[str] = Query(None),
     carrier: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
@@ -448,7 +449,10 @@ def get_transports(
         where_clauses.append("(client_name LIKE ? OR city LIKE ? OR carrier LIKE ? OR notes LIKE ?)")
         params.extend([q_clean] * 4)
         
-    if date_filter and isinstance(date_filter, str):
+    if exact_date and isinstance(exact_date, str) and exact_date.strip():
+        where_clauses.append("transport_date = ?")
+        params.append(exact_date.strip())
+    elif date_filter and isinstance(date_filter, str):
         if date_filter == "today":
             where_clauses.append("transport_date = ?")
             params.append(today_str)

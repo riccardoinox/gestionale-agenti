@@ -312,12 +312,21 @@
         <button id="transports-clear" class="search-clear-btn" onclick="clearTransportsSearch()">✕</button>
       </div>
 
-      <!-- Date Filter Pills -->
-      <div class="filter-pills">
-        <button class="pill active" data-date="all" onclick="setTransportDateFilter('all')">Tutti</button>
-        <button class="pill" data-date="today" onclick="setTransportDateFilter('today')">📅 Oggi</button>
-        <button class="pill" data-date="upcoming" onclick="setTransportDateFilter('upcoming')">⏳ Da Spedire / Prossimi</button>
-        <button class="pill" data-date="past" onclick="setTransportDateFilter('past')">📜 Storico Consegne</button>
+      <!-- Date Selection Controls: Pills & Specific Date Picker -->
+      <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px;">
+        <div class="filter-pills" style="margin-bottom: 0;">
+          <button class="pill active" data-date="all" onclick="setTransportDateFilter('all')">Tutti</button>
+          <button class="pill" data-date="today" onclick="setTransportDateFilter('today')">📅 Oggi</button>
+          <button class="pill" data-date="upcoming" onclick="setTransportDateFilter('upcoming')">⏳ Da Spedire / Prossimi</button>
+          <button class="pill" data-date="past" onclick="setTransportDateFilter('past')">📜 Storico</button>
+        </div>
+
+        <!-- Exact Date Picker Input -->
+        <div style="display: flex; align-items: center; gap: 6px; background: var(--bg-card); padding: 4px 10px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+          <label for="transports-date-picker" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); white-space: nowrap;">📅 Scegli data:</label>
+          <input type="date" id="transports-date-picker" class="form-input" style="padding: 4px 8px; font-size: 0.82rem; width: auto; border: none; background: transparent;" onchange="onTransportDatePickerChange(this.value)">
+          <button id="transports-date-clear-btn" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 0.75rem; display: none;" onclick="clearTransportDatePicker()" title="Cancella data scelta">✕</button>
+        </div>
       </div>
 
       <!-- Carrier Filter Dropdown & Counts -->
@@ -625,6 +634,6 @@
   </nav>
 
   <!-- App Javascript -->
-  <script src="/static/app.js?v=4.0"></script>
+  <script src="/static/app.js?v=4.1"></script>
 </body>
 </html>

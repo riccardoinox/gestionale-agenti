@@ -6,7 +6,7 @@ let currentRole = null;
 let clientsState = { q: '', agent: 'ALL', province: 'ALL', offset: 0, limit: 30, total: 0 };
 let articlesState = { q: '', stock_filter: 'all', offset: 0, limit: 30, total: 0 };
 let ordersState = { q: '', evaso: 'all', offset: 0, limit: 30, total: 0 };
-let transportsState = { q: '', date_filter: 'all', carrier: 'ALL', offset: 0, limit: 30, total: 0 };
+let transportsState = { q: '', date_filter: 'all', exact_date: '', carrier: 'ALL', offset: 0, limit: 30, total: 0 };
 
 let deferredPrompt = null;
 
@@ -914,11 +914,51 @@ function clearTransportsSearch() {
 }
 
 function setTransportDateFilter(val) {
+  // Clear exact date picker if user clicks a preset pill
+  const picker = document.getElementById('transports-date-picker');
+  const clearBtn = document.getElementById('transports-date-clear-btn');
+  if (picker) picker.value = '';
+  if (clearBtn) clearBtn.style.display = 'none';
+
+  transportsState.exact_date = '';
   transportsState.date_filter = val;
   transportsState.offset = 0;
 
   document.querySelectorAll('[data-date]').forEach(el => {
     el.classList.toggle('active', el.getAttribute('data-date') === val);
+  });
+
+  fetchTransports();
+}
+
+function onTransportDatePickerChange(val) {
+  const clearBtn = document.getElementById('transports-date-clear-btn');
+  if (!val) {
+    clearTransportDatePicker();
+    return;
+  }
+
+  // Deactivate all preset pills when choosing an exact date
+  document.querySelectorAll('[data-date]').forEach(el => el.classList.remove('active'));
+  if (clearBtn) clearBtn.style.display = 'inline-flex';
+
+  transportsState.exact_date = val;
+  transportsState.offset = 0;
+  fetchTransports();
+}
+
+function clearTransportDatePicker() {
+  const picker = document.getElementById('transports-date-picker');
+  const clearBtn = document.getElementById('transports-date-clear-btn');
+  if (picker) picker.value = '';
+  if (clearBtn) clearBtn.style.display = 'none';
+
+  transportsState.exact_date = '';
+  transportsState.date_filter = 'all';
+  transportsState.offset = 0;
+
+  document.querySelectorAll('[data-date]').forEach(el => {
+    el.classList.toggle('active', el.getAttribute('data-date') === 'all');
   });
 
   fetchTransports();
@@ -938,9 +978,15 @@ async function fetchTransports() {
   try {
     const params = new URLSearchParams({
       limit: transportsState.limit,
-      offset: transportsState.offset,
-      date_filter: transportsState.date_filter
+      offset: transportsState.offset
     });
+
+    if (transportsState.exact_date) {
+      params.append('exact_date', transportsState.exact_date);
+    } else {
+      params.append('date_filter', transportsState.date_filter);
+    }
+
     if (transportsState.q) params.append('q', transportsState.q);
     if (transportsState.carrier && transportsState.carrier !== 'ALL') params.append('carrier', transportsState.carrier);
 
