@@ -756,28 +756,51 @@ async function openArticleDetail(encodedCode) {
   const modal = document.getElementById('modal-article');
   modal.classList.add('active');
 
+  const setElText = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+
+  const code = decodeURIComponent(encodedCode);
+  setElText('modal-art-code', code);
+  setElText('modal-art-desc', 'Caricamento articolo...');
+
   try {
     const res = await authFetch(`/api/articles/${encodedCode}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const art = await res.json();
 
-    document.getElementById('modal-art-code').textContent = art.code;
-    document.getElementById('modal-art-desc').textContent = art.description;
-    document.getElementById('modal-art-price').textContent = art.listino_prezzo > 0 ? formatCurrency(art.listino_prezzo) : 'Da Concordare';
-    document.getElementById('modal-art-cost').textContent = art.ultimo_costo > 0 ? formatCurrency(art.ultimo_costo) : '-';
+    setElText('modal-art-code', art.code || code);
+    setElText('modal-art-desc', art.description || '-');
+    setElText('modal-art-price', art.listino_prezzo > 0 ? formatCurrency(art.listino_prezzo) : 'Da Concordare');
 
-    document.getElementById('modal-art-disp').textContent = `${formatNumber(art.disp_netta)} ${art.um}`;
-    document.getElementById('modal-art-disp').style.color = art.disp_netta > 0 ? 'var(--success)' : 'var(--danger)';
+    const costEl = document.getElementById('modal-art-cost');
+    if (costEl) costEl.textContent = art.ultimo_costo > 0 ? formatCurrency(art.ultimo_costo) : '-';
 
-    document.getElementById('modal-art-esist').textContent = `${formatNumber(art.esistenza)} ${art.um}`;
-    document.getElementById('modal-art-imp').textContent = `${formatNumber(art.impegnato)} ${art.um}`;
-    document.getElementById('modal-art-ord').textContent = `${formatNumber(art.ordinato)} ${art.um}`;
-    document.getElementById('modal-art-um').textContent = art.um || '-';
-    document.getElementById('modal-art-alt').textContent = art.cod_altern || '-';
-    document.getElementById('modal-art-alistino').textContent = art.a_listino === 'S' ? 'Sì' : 'No';
-    document.getElementById('modal-art-esaurim').textContent = art.in_esaurim === 'S' ? 'In Esaurimento' : 'Regolare';
+    // Availability & stock quantities
+    const dispEl = document.getElementById('modal-art-disp-netta') || document.getElementById('modal-art-disp');
+    if (dispEl) {
+      dispEl.textContent = `${formatNumber(art.disp_netta)} ${art.um || 'PZ'}`;
+      dispEl.style.color = art.disp_netta > 0 ? 'var(--success)' : 'var(--danger)';
+    }
+
+    const esistEl = document.getElementById('modal-art-esistenza') || document.getElementById('modal-art-esist');
+    if (esistEl) esistEl.textContent = `${formatNumber(art.esistenza)} ${art.um || 'PZ'}`;
+
+    const impEl = document.getElementById('modal-art-impegnato') || document.getElementById('modal-art-imp');
+    if (impEl) impEl.textContent = `${formatNumber(art.impegnato)} ${art.um || 'PZ'}`;
+
+    const ordEl = document.getElementById('modal-art-ordinato') || document.getElementById('modal-art-ord');
+    if (ordEl) ordEl.textContent = `${formatNumber(art.ordinato)} ${art.um || 'PZ'}`;
+
+    setElText('modal-art-um', art.um || '-');
+    setElText('modal-art-alt', art.cod_altern || '-');
+    setElText('modal-art-alistino', art.a_listino === 'S' ? 'Sì' : 'No');
+    setElText('modal-art-esaurim', art.in_esaurim === 'S' ? 'In Esaurimento' : 'Regolare');
 
   } catch (err) {
-    document.getElementById('modal-art-desc').textContent = 'Errore nel caricamento articolo';
+    console.error('Errore openArticleDetail:', err);
+    setElText('modal-art-desc', 'Errore nel caricamento articolo');
   }
 }
 

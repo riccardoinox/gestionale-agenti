@@ -566,7 +566,10 @@ def get_article_detail(code: str, role: str = Depends(require_auth)):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM articles WHERE code = ?", (code,))
+    import urllib.parse
+    unquoted_code = urllib.parse.unquote(code)
+
+    cursor.execute("SELECT * FROM articles WHERE code = ? OR code = ?", (code, unquoted_code))
     article_row = cursor.fetchone()
     if not article_row:
         conn.close()
