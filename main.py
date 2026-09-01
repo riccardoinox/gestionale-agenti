@@ -2,6 +2,7 @@ import os
 import sqlite3
 import hashlib
 import shutil
+import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, Query, HTTPException, BackgroundTasks, Header, UploadFile, File, Form, Depends, Request
 from fastapi.staticfiles import StaticFiles
@@ -26,6 +27,14 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 # Make sure static directory exists
 os.makedirs(STATIC_DIR, exist_ok=True)
+
+def safe_int_param(val, default: int) -> int:
+    try:
+        if hasattr(val, "default"):
+            return int(val.default)
+        return int(val)
+    except Exception:
+        return default
 
 # -------------------------------------------------------------
 # AUTHENTICATION & SECURITY HELPERS
@@ -155,8 +164,12 @@ async def upload_excel_files(
         
         # Identify target standard filename
         target_name = fname
-        if "anagra" in fname_lower:
-            target_name = "ANAGRA.xlsx"
+        if "tab1" in fname_lower:
+            target_name = "Tab1.xlsx"
+        elif "trasporti" in fname_lower:
+            target_name = "TRASPORTI_2024.xlsx"
+        elif "anagra" in fname_lower:
+            target_name = "Tab1.xlsx"  # Prefer Tab1 even if uploaded with anagra name
         elif "artico" in fname_lower:
             target_name = "ARTICO.xlsx"
         elif "seor" in fname_lower:
@@ -230,6 +243,18 @@ def get_stats(role: str = Depends(require_auth)):
     cursor.execute("SELECT COALESCE(SUM(total_amount), 0) FROM orders")
     total_turnover = cursor.fetchone()[0]
 
+    # Transports stats
+    cursor.execute("SELECT COUNT(*) FROM transports")
+    total_transports = cursor.fetchone()[0]
+
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    cursor.execute("SELECT COUNT(*) FROM transports WHERE transport_date = ?", (today_str,))
+    today_transports = cursor.fetchone()[0]
+
+    # Agents count
+    cursor.execute("SELECT COUNT(DISTINCT agent_name) FROM clients WHERE agent_name != ''")
+    total_agents = cursor.fetchone()[0]
+
     cursor.execute("SELECT timestamp, status, details FROM sync_logs ORDER BY id DESC LIMIT 1")
     last_sync_row = cursor.fetchone()
     last_sync = {
@@ -248,6 +273,9 @@ def get_stats(role: str = Depends(require_auth)):
         "pending_orders_count": pending_orders,
         "pending_orders_amount": round(pending_amount, 2),
         "total_turnover": round(total_turnover, 2),
+        "transports_count": total_transports,
+        "today_transports_count": today_transports,
+        "agents_count": total_agents,
         "last_sync": last_sync
     }
 
@@ -259,8 +287,10 @@ def trigger_sync(role: str = Depends(require_admin)):
 
 @app.get("/api/clients")
 def get_clients(
-    q: Optional[str] = Query(None, description="Search term for name, code, city, vat"),
+    q: Optional[str] = Query(None, description="Search term for name, code, city, vat, email, agent"),
     city: Optional[str] = Query(None, description="Filter by city"),
+    province: Optional[str] = Query(None, description="Filter by 2-letter province (e.g. PD, TV, VI)"),
+    agent: Optional[str] = Query(None, description="Filter by agent name"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     role: str = Depends(require_auth)
@@ -271,16 +301,24 @@ def get_clients(
     params = []
     where_clauses = []
 
-    if q:
+    if q and isinstance(q, str) and q.strip():
         q_clean = f"%{q.strip()}%"
         where_clauses.append("""
-            (c.code LIKE ? OR c.name LIKE ? OR c.name2 LIKE ? OR c.city LIKE ? OR c.vat LIKE ? OR c.tax_code LIKE ? OR c.phone LIKE ? OR c.mobile LIKE ?)
+            (c.code LIKE ? OR c.name LIKE ? OR c.city LIKE ? OR c.province LIKE ? OR c.email LIKE ? OR c.agent_name LIKE ? OR c.phone LIKE ? OR c.mobile LIKE ? OR c.address LIKE ?)
         """)
-        params.extend([q_clean] * 8)
+        params.extend([q_clean] * 9)
 
-    if city:
+    if city and isinstance(city, str) and city.strip():
         where_clauses.append("c.city LIKE ?")
         params.append(f"%{city.strip()}%")
+
+    if province and isinstance(province, str) and province.strip().upper() != "ALL":
+        where_clauses.append("c.province = ?")
+        params.append(province.strip().upper())
+
+    if agent and isinstance(agent, str) and agent.strip().upper() != "ALL":
+        where_clauses.append("c.agent_name = ?")
+        params.append(agent.strip())
 
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
@@ -288,6 +326,9 @@ def get_clients(
     count_sql = f"SELECT COUNT(*) FROM clients c {where_sql}"
     cursor.execute(count_sql, params)
     total_count = cursor.fetchone()[0]
+
+    lim = safe_int_param(limit, 50)
+    off = safe_int_param(offset, 0)
 
     # Select clients with order count and pending orders count
     sql = f"""
@@ -301,7 +342,7 @@ def get_clients(
         ORDER BY c.name ASC
         LIMIT ? OFFSET ?
     """
-    cursor.execute(sql, params + [limit, offset])
+    cursor.execute(sql, params + [lim, off])
     rows = cursor.fetchall()
     
     clients = [dict(row) for row in rows]
@@ -309,9 +350,27 @@ def get_clients(
 
     return {
         "total": total_count,
-        "limit": limit,
-        "offset": offset,
+        "limit": lim,
+        "offset": off,
         "items": clients
+    }
+
+@app.get("/api/clients/filters")
+def get_client_filters(role: str = Depends(require_auth)):
+    """Returns sorted lists of distinct agents and provinces for UI dropdowns."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT DISTINCT agent_name FROM clients WHERE agent_name != '' ORDER BY agent_name ASC")
+    agents = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("SELECT DISTINCT province FROM clients WHERE province != '' ORDER BY province ASC")
+    provinces = [row[0] for row in cursor.fetchall()]
+
+    conn.close()
+    return {
+        "agents": agents,
+        "provinces": provinces
     }
 
 @app.get("/api/clients/{code}")
@@ -340,16 +399,101 @@ def get_client_detail(code: str, role: str = Depends(require_auth)):
     pending_orders = sum(1 for o in orders if o["evaso"] == "N")
     total_amount = sum(o["total_amount"] or 0 for o in orders)
 
+    # Fetch upcoming & recent transports for this client
+    client_name = client["name"].strip()
+    first_word = client_name.split()[0] if client_name else ""
+    cursor.execute("""
+        SELECT * FROM transports 
+        WHERE client_name LIKE ? OR (? != '' AND client_name LIKE ?)
+        ORDER BY transport_date DESC
+        LIMIT 10
+    """, (f"%{client_name}%", first_word, f"%{first_word}%"))
+    transports = [dict(row) for row in cursor.fetchall()]
+
     conn.close()
 
     return {
         "client": client,
         "orders": orders,
+        "transports": transports,
         "summary": {
             "total_orders": total_orders,
             "pending_orders": pending_orders,
             "total_amount": round(total_amount, 2)
         }
+    }
+
+# -------------------------------------------------------------
+# TRANSPORTS ENDPOINTS (AUTHENTICATED)
+# -------------------------------------------------------------
+@app.get("/api/transports")
+def get_transports(
+    q: Optional[str] = Query(None, description="Search client, city, carrier, notes"),
+    date_filter: Optional[str] = Query("all", description="all, today, upcoming, past"),
+    province: Optional[str] = Query(None),
+    carrier: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    role: str = Depends(require_auth)
+):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    params = []
+    where_clauses = []
+    
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    
+    if q and isinstance(q, str) and q.strip():
+        q_clean = f"%{q.strip()}%"
+        where_clauses.append("(client_name LIKE ? OR city LIKE ? OR carrier LIKE ? OR notes LIKE ?)")
+        params.extend([q_clean] * 4)
+        
+    if date_filter and isinstance(date_filter, str):
+        if date_filter == "today":
+            where_clauses.append("transport_date = ?")
+            params.append(today_str)
+        elif date_filter == "upcoming":
+            where_clauses.append("transport_date >= ?")
+            params.append(today_str)
+        elif date_filter == "past":
+            where_clauses.append("transport_date < ? AND transport_date != ''")
+            params.append(today_str)
+        
+    if province and isinstance(province, str) and province.strip().upper() != "ALL":
+        where_clauses.append("province = ?")
+        params.append(province.strip().upper())
+        
+    if carrier and isinstance(carrier, str) and carrier.strip().upper() != "ALL":
+        where_clauses.append("carrier = ?")
+        params.append(carrier.strip())
+        
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    
+    cursor.execute(f"SELECT COUNT(*) FROM transports {where_sql}", params)
+    total = cursor.fetchone()[0]
+
+    lim = safe_int_param(limit, 50)
+    off = safe_int_param(offset, 0)
+
+    cursor.execute(f"""
+        SELECT * FROM transports 
+        {where_sql} 
+        ORDER BY transport_date DESC, id DESC 
+        LIMIT ? OFFSET ?
+    """, params + [lim, off])
+    items = [dict(row) for row in cursor.fetchall()]
+    
+    # Fetch distinct carriers for UI filter
+    cursor.execute("SELECT DISTINCT carrier FROM transports WHERE carrier != '' ORDER BY carrier ASC")
+    carriers = [row[0] for row in cursor.fetchall()]
+    
+    conn.close()
+    return {
+        "total": total,
+        "limit": lim,
+        "offset": off,
+        "items": items,
+        "carriers": carriers
     }
 
 @app.get("/api/articles")
@@ -367,17 +511,18 @@ def get_articles(
     params = []
     where_clauses = []
 
-    if q:
+    if q and isinstance(q, str) and q.strip():
         q_clean = f"%{q.strip()}%"
         where_clauses.append("(code LIKE ? OR description LIKE ? OR cod_altern LIKE ? OR descr2 LIKE ?)")
         params.extend([q_clean] * 4)
 
-    if stock_filter == "available":
-        where_clauses.append("disp_netta > 0")
-    elif stock_filter == "out_of_stock":
-        where_clauses.append("disp_netta <= 0")
-    elif stock_filter == "low_stock":
-        where_clauses.append("disp_netta > 0 AND disp_netta <= 50")
+    if stock_filter and isinstance(stock_filter, str):
+        if stock_filter == "available":
+            where_clauses.append("disp_netta > 0")
+        elif stock_filter == "out_of_stock":
+            where_clauses.append("disp_netta <= 0")
+        elif stock_filter == "low_stock":
+            where_clauses.append("disp_netta > 0 AND disp_netta <= 50")
 
     if has_price is True:
         where_clauses.append("listino_prezzo > 0")
@@ -389,6 +534,9 @@ def get_articles(
     cursor.execute(count_sql, params)
     total_count = cursor.fetchone()[0]
 
+    lim = safe_int_param(limit, 50)
+    off = safe_int_param(offset, 0)
+
     # Select articles
     sql = f"""
         SELECT * FROM articles
@@ -396,7 +544,7 @@ def get_articles(
         ORDER BY description ASC, code ASC
         LIMIT ? OFFSET ?
     """
-    cursor.execute(sql, params + [limit, offset])
+    cursor.execute(sql, params + [lim, off])
     rows = cursor.fetchall()
     
     articles = [dict(row) for row in rows]
@@ -404,8 +552,8 @@ def get_articles(
 
     return {
         "total": total_count,
-        "limit": limit,
-        "offset": offset,
+        "limit": lim,
+        "offset": off,
         "items": articles
     }
 
@@ -440,16 +588,16 @@ def get_orders(
     params = []
     where_clauses = []
 
-    if q:
+    if q and isinstance(q, str) and q.strip():
         q_clean = f"%{q.strip()}%"
         where_clauses.append("(client_name LIKE ? OR client_code LIKE ? OR reference LIKE ? OR id LIKE ? OR CAST(number AS TEXT) LIKE ?)")
         params.extend([q_clean] * 5)
 
-    if evaso and evaso.upper() != "ALL":
+    if evaso and isinstance(evaso, str) and evaso.upper() != "ALL":
         where_clauses.append("evaso = ?")
         params.append(evaso.upper())
 
-    if client_code:
+    if client_code and isinstance(client_code, str):
         where_clauses.append("client_code = ?")
         params.append(client_code)
 
@@ -460,6 +608,9 @@ def get_orders(
     cursor.execute(count_sql, params)
     total_count = cursor.fetchone()[0]
 
+    lim = safe_int_param(limit, 50)
+    off = safe_int_param(offset, 0)
+
     # Select orders
     sql = f"""
         SELECT * FROM orders
@@ -467,7 +618,7 @@ def get_orders(
         ORDER BY order_date DESC, number DESC
         LIMIT ? OFFSET ?
     """
-    cursor.execute(sql, params + [limit, offset])
+    cursor.execute(sql, params + [lim, off])
     rows = cursor.fetchall()
     
     orders = [dict(row) for row in rows]
@@ -475,8 +626,8 @@ def get_orders(
 
     return {
         "total": total_count,
-        "limit": limit,
-        "offset": offset,
+        "limit": lim,
+        "offset": off,
         "items": orders
     }
 

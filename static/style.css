@@ -508,6 +508,11 @@ body {
   color: var(--text-muted);
 }
 
+.badge-purple {
+  background-color: #f3e8ff;
+  color: #7e22ce;
+}
+
 /* Quick Action Buttons in Card */
 .card-actions {
   display: flex;

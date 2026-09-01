@@ -22,6 +22,11 @@ def init_db():
         name TEXT NOT NULL,
         name2 TEXT,
         city TEXT,
+        province TEXT,
+        address TEXT,
+        cap TEXT,
+        email TEXT,
+        agent_name TEXT,
         mobile TEXT,
         phone TEXT,
         fax TEXT,
@@ -31,9 +36,24 @@ def init_db():
         first_name TEXT,
         last_name TEXT,
         subject_type TEXT,
+        date_acq TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
+    # Ensure new columns exist if table was previously created
+    for col, col_type in [
+        ("province", "TEXT"),
+        ("address", "TEXT"),
+        ("cap", "TEXT"),
+        ("email", "TEXT"),
+        ("agent_name", "TEXT"),
+        ("date_acq", "TEXT")
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE clients ADD COLUMN {col} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
     # Articles table
     cursor.execute("""
@@ -87,6 +107,26 @@ def init_db():
     )
     """)
 
+    # Transports table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS transports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transport_date TEXT,
+        day_name TEXT,
+        time_slot TEXT,
+        client_name TEXT NOT NULL,
+        city TEXT,
+        province TEXT,
+        weight_kg REAL,
+        carrier TEXT,
+        notes TEXT,
+        zone TEXT,
+        charge REAL,
+        sheet_name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # Sync Logs
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS sync_logs (
@@ -118,12 +158,18 @@ def init_db():
     # Create indexes for ultra fast search
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_city ON clients(city)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_province ON clients(province)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_agent ON clients(agent_name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_vat ON clients(vat)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_desc ON articles(description)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_articles_disp ON articles(disp_netta)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_client ON orders(client_code)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(order_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_evaso ON orders(evaso)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_client ON transports(client_name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_date ON transports(transport_date)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_carrier ON transports(carrier)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_province ON transports(province)")
 
     conn.commit()
     conn.close()

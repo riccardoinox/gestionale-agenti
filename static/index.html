@@ -73,6 +73,9 @@
       <button class="nav-btn" data-tab="orders" onclick="switchTab('orders')">
         📋 Ordini 2026
       </button>
+      <button class="nav-btn" data-tab="transports" onclick="switchTab('transports')">
+        🚚 Trasporti
+      </button>
       <button id="nav-btn-admin" class="nav-btn" data-tab="admin" onclick="switchTab('admin')">
         ⚙️ Gestione Admin
       </button>
@@ -156,12 +159,21 @@
           <div id="stat-orders" class="stat-value">-</div>
           <div id="stat-turnover" class="stat-sub">Volume totale € -</div>
         </div>
+
+        <div class="stat-card" onclick="switchTab('transports')">
+          <div class="stat-header">
+            <span class="stat-title">Trasporti '26</span>
+            <div class="stat-icon" style="background: #e0f2fe; color: #0284c7;">🚚</div>
+          </div>
+          <div id="stat-transports" class="stat-value">-</div>
+          <div id="stat-transports-sub" class="stat-sub">- previsti oggi</div>
+        </div>
       </div>
 
       <!-- Quick Access Section -->
       <div style="margin-top: 10px;">
         <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">Accessi Rapidi</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
           <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="filterArticlesAndSwitch('available')">
             🟢 Articoli Disponibili
           </button>
@@ -170,6 +182,9 @@
           </button>
           <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="filterOrdersAndSwitch('N')">
             ⏳ Ordini Da Evadere
+          </button>
+          <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="switchTab('transports'); setTransportDateFilter('today');">
+            🚚 Consegne Oggi
           </button>
         </div>
       </div>
@@ -193,8 +208,29 @@
     <section id="tab-clients" class="tab-content" style="display: none;">
       <div class="search-box">
         <span class="search-icon-left">🔍</span>
-        <input type="text" id="clients-search" class="search-input" placeholder="Cerca per Ragione Sociale, Città, P.IVA, Codice..." oninput="onClientsSearch(this.value)">
+        <input type="text" id="clients-search" class="search-input" placeholder="Cerca per Ragione Sociale, Città, Email, Agente, Codice..." oninput="onClientsSearch(this.value)">
         <button id="clients-clear" class="search-clear-btn" onclick="clearClientsSearch()">✕</button>
+      </div>
+
+      <!-- Filters: Agent & Province -->
+      <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 150px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">👤 AGENTE</label>
+          <select id="clients-agent-filter" class="form-input" style="padding: 8px 10px; font-size: 0.85rem;" onchange="onClientsFilterChange()">
+            <option value="ALL">Tutti gli agenti</option>
+          </select>
+        </div>
+        <div style="flex: 1; min-width: 140px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">📍 PROVINCIA</label>
+          <select id="clients-province-filter" class="form-input" style="padding: 8px 10px; font-size: 0.85rem;" onchange="onClientsFilterChange()">
+            <option value="ALL">Tutte le province</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: flex-end;">
+          <button class="btn btn-secondary btn-sm" onclick="resetClientsFilters()" style="padding: 8px 12px; height: 38px;" title="Azzera filtri">
+            Ripristina
+          </button>
+        </div>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -267,7 +303,40 @@
     </section>
 
     <!-- ============================================================ -->
-    <!-- TAB 5: AMMINISTRAZIONE & CARICAMENTO EXCEL -->
+    <!-- TAB 5: TRASPORTI & CONSEGNE -->
+    <!-- ============================================================ -->
+    <section id="tab-transports" class="tab-content" style="display: none;">
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="transports-search" class="search-input" placeholder="Cerca per cliente, comune, vettore, note..." oninput="onTransportsSearch(this.value)">
+        <button id="transports-clear" class="search-clear-btn" onclick="clearTransportsSearch()">✕</button>
+      </div>
+
+      <!-- Date Filter Pills -->
+      <div class="filter-pills">
+        <button class="pill active" data-date="all" onclick="setTransportDateFilter('all')">Tutti</button>
+        <button class="pill" data-date="today" onclick="setTransportDateFilter('today')">📅 Oggi</button>
+        <button class="pill" data-date="upcoming" onclick="setTransportDateFilter('upcoming')">⏳ Da Spedire / Prossimi</button>
+        <button class="pill" data-date="past" onclick="setTransportDateFilter('past')">📜 Storico Consegne</button>
+      </div>
+
+      <!-- Carrier Filter Dropdown & Counts -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <span id="transports-count-badge" class="badge badge-gray">0 trasporti</span>
+        <select id="transports-carrier-filter" class="form-input" style="width: auto; padding: 6px 12px; font-size: 0.82rem;" onchange="onTransportsCarrierChange()">
+          <option value="ALL">Tutti i vettori</option>
+        </select>
+      </div>
+
+      <div id="transports-list" class="card-list">
+        <div class="loading-spinner">Caricamento trasporti...</div>
+      </div>
+      
+      <div id="transports-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;"></div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 6: AMMINISTRAZIONE & CARICAMENTO EXCEL -->
     <!-- ============================================================ -->
     <section id="tab-admin" class="tab-content" style="display: none;">
       
@@ -284,9 +353,9 @@
         <form id="upload-excel-form" onsubmit="handleExcelUpload(event)">
           <div class="file-drop-grid">
             <div class="file-drop-box" id="drop-anagra">
-              <input type="file" id="file-anagra" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-anagra', 'ANAGRA')">
-              <div class="file-label-title">👥 Clienti (ANAGRA)</div>
-              <div class="file-label-desc">Trascina o seleziona ANAGRA.xlsx</div>
+              <input type="file" id="file-anagra" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-anagra', 'Tab1')">
+              <div class="file-label-title">👥 Clienti (Tab1.xlsx)</div>
+              <div class="file-label-desc">Trascina Tab1.xlsx o ANAGRA</div>
               <div class="file-selected-name" id="name-anagra"></div>
             </div>
 
@@ -307,8 +376,15 @@
             <div class="file-drop-box" id="drop-listino">
               <input type="file" id="file-listino" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-listino', 'LISTINO')">
               <div class="file-label-title">🏷️ Nuovo Listino Prezzi</div>
-              <div class="file-label-desc">Trascina o seleziona Listino.xlsx</div>
+              <div class="file-label-desc">Trascina Listino May 2026</div>
               <div class="file-selected-name" id="name-listino"></div>
+            </div>
+
+            <div class="file-drop-box" id="drop-trasporti">
+              <input type="file" id="file-trasporti" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-trasporti', 'TRASPORTI')">
+              <div class="file-label-title">🚚 Trasporti e Consegne</div>
+              <div class="file-label-desc">Trascina TRASPORTI_2024.xlsx</div>
+              <div class="file-selected-name" id="name-trasporti"></div>
             </div>
           </div>
 
@@ -394,20 +470,46 @@
       <!-- Details -->
       <div class="detail-grid">
         <div class="detail-item">
-          <div class="detail-label">Città</div>
+          <div class="detail-label">👤 Agente Assegnato</div>
+          <div id="modal-client-agent" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">📍 Provincia & Città</div>
           <div id="modal-client-city" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">🏢 Indirizzo & CAP</div>
+          <div id="modal-client-address" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">✉️ Email</div>
+          <div id="modal-client-email" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">📞 Telefono</div>
+          <div id="modal-client-phone" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">📱 Cellulare</div>
+          <div id="modal-client-mobile" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">👤 Contatto / Rif.</div>
+          <div id="modal-client-contact" class="detail-value">-</div>
         </div>
         <div class="detail-item">
           <div class="detail-label">Partita IVA / CF</div>
           <div id="modal-client-vat" class="detail-value">-</div>
         </div>
-        <div class="detail-item">
-          <div class="detail-label">Telefono</div>
-          <div id="modal-client-phone" class="detail-value">-</div>
+      </div>
+
+      <!-- Transports / Deliveries Section for this Client -->
+      <div style="margin-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="font-size: 0.95rem; font-weight: 700;">🚚 Consegne e Trasporti (<span id="modal-client-transports-count">0</span>)</h3>
         </div>
-        <div class="detail-item">
-          <div class="detail-label">Cellulare</div>
-          <div id="modal-client-mobile" class="detail-value">-</div>
+        <div id="modal-client-transports-list" class="card-list">
+          <div style="color: var(--text-muted); font-size: 0.85rem;">Nessun trasporto recente programmato.</div>
         </div>
       </div>
 
@@ -443,29 +545,29 @@
           <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9;">Prezzo Listino Netto</div>
           <div id="modal-art-price" style="font-size: 1.6rem; font-weight: 800;">€ 0,00</div>
         </div>
-        <div style="text-align: right;">
-          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9;">Ultimo Costo</div>
-          <div id="modal-art-cost" style="font-size: 1.2rem; font-weight: 700; opacity: 0.95;">€ 0,00</div>
+        <div style="text-align: right; font-size: 0.8rem; opacity: 0.9;">
+          <div>IVA Esclusa</div>
+          <div>Prezzo Rivenditore</div>
         </div>
       </div>
 
-      <!-- Stock Matrix -->
-      <div class="detail-grid">
-        <div class="detail-item">
+      <!-- Stock Availability Matrix -->
+      <div class="detail-grid" style="margin-bottom: 16px;">
+        <div class="detail-item" style="border-left: 4px solid var(--primary);">
           <div class="detail-label">Disponibilità Netta</div>
-          <div id="modal-art-disp" class="detail-value">-</div>
+          <div id="modal-art-disp-netta" class="detail-value" style="font-weight: 800; font-size: 1.15rem;">0 PZ</div>
         </div>
         <div class="detail-item">
-          <div class="detail-label">Giacenza (Esistenza)</div>
-          <div id="modal-art-esist" class="detail-value">-</div>
+          <div class="detail-label">Esistenza Fisica</div>
+          <div id="modal-art-esistenza" class="detail-value">0 PZ</div>
         </div>
         <div class="detail-item">
           <div class="detail-label">Impegnato Clienti</div>
-          <div id="modal-art-imp" class="detail-value" style="color: var(--danger);">-</div>
+          <div id="modal-art-impegnato" class="detail-value">0 PZ</div>
         </div>
         <div class="detail-item">
           <div class="detail-label">Ordinato a Fornitori</div>
-          <div id="modal-art-ord" class="detail-value" style="color: var(--primary);">-</div>
+          <div id="modal-art-ordinato" class="detail-value">0 PZ</div>
         </div>
       </div>
 
@@ -512,6 +614,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
       <span>Ordini</span>
     </button>
+    <button class="mobile-nav-item" data-tab="transports" onclick="switchTab('transports')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+      <span>Trasporti</span>
+    </button>
     <button id="mobile-nav-admin" class="mobile-nav-item" data-tab="admin" onclick="switchTab('admin')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span>Admin</span>
@@ -519,6 +625,6 @@
   </nav>
 
   <!-- App Javascript -->
-  <script src="/static/app.js?v=3.5"></script>
+  <script src="/static/app.js?v=4.0"></script>
 </body>
 </html>

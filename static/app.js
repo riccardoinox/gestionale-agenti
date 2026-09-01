@@ -3,9 +3,10 @@ let currentTab = 'dashboard';
 let debounceTimer = null;
 let currentRole = null;
 
-let clientsState = { q: '', offset: 0, limit: 30, total: 0 };
+let clientsState = { q: '', agent: 'ALL', province: 'ALL', offset: 0, limit: 30, total: 0 };
 let articlesState = { q: '', stock_filter: 'all', offset: 0, limit: 30, total: 0 };
 let ordersState = { q: '', evaso: 'all', offset: 0, limit: 30, total: 0 };
+let transportsState = { q: '', date_filter: 'all', carrier: 'ALL', offset: 0, limit: 30, total: 0 };
 
 let deferredPrompt = null;
 
@@ -175,6 +176,7 @@ async function checkAuthAndInit() {
       updateRoleUI();
       fetchStats();
       loadDashboardOrders();
+      loadClientFilters();
     } else {
       showLoginOverlay();
     }
@@ -216,6 +218,8 @@ function switchTab(tabId) {
     if (articlesState.total === 0) fetchArticles();
   } else if (tabId === 'orders') {
     if (ordersState.total === 0) fetchOrders();
+  } else if (tabId === 'transports') {
+    if (transportsState.total === 0) fetchTransports();
   } else if (tabId === 'admin') {
     loadAdminSettings();
     loadAdminLogs();
@@ -252,6 +256,12 @@ async function fetchStats() {
     document.getElementById('stat-pending-amount').textContent = `${formatCurrency(data.pending_orders_amount)} in attesa`;
     document.getElementById('stat-orders').textContent = formatNumber(data.orders_count);
     document.getElementById('stat-turnover').textContent = `Volume totale ${formatCurrency(data.total_turnover)}`;
+
+    const statTransports = document.getElementById('stat-transports');
+    if (statTransports) {
+      statTransports.textContent = formatNumber(data.transports_count || 0);
+      document.getElementById('stat-transports-sub').textContent = `${formatNumber(data.today_transports_count || 0)} previsti oggi`;
+    }
 
     if (data.last_sync) {
       document.getElementById('header-sync-status').textContent = `Ultimo sync: ${data.last_sync.timestamp}`;
@@ -368,8 +378,57 @@ function clearOmniSearch() {
 }
 
 // ==========================================
-// CLIENTS TAB
+// CLIENTS TAB & FILTERS
 // ==========================================
+async function loadClientFilters() {
+  try {
+    const res = await authFetch('/api/clients/filters');
+    const data = await res.json();
+
+    const agentSelect = document.getElementById('clients-agent-filter');
+    if (agentSelect && data.agents) {
+      agentSelect.innerHTML = '<option value="ALL">Tutti gli agenti</option>' + 
+        data.agents.map(a => `<option value="${a}">${a}</option>`).join('');
+    }
+
+    const provSelect = document.getElementById('clients-province-filter');
+    if (provSelect && data.provinces) {
+      provSelect.innerHTML = '<option value="ALL">Tutte le province</option>' + 
+        data.provinces.map(p => `<option value="${p}">${p}</option>`).join('');
+    }
+  } catch (err) {
+    console.error('Error loading client filters:', err);
+  }
+}
+
+function onClientsFilterChange() {
+  const agentSelect = document.getElementById('clients-agent-filter');
+  const provSelect = document.getElementById('clients-province-filter');
+
+  clientsState.agent = agentSelect ? agentSelect.value : 'ALL';
+  clientsState.province = provSelect ? provSelect.value : 'ALL';
+  clientsState.offset = 0;
+  fetchClients();
+}
+
+function resetClientsFilters() {
+  const agentSelect = document.getElementById('clients-agent-filter');
+  const provSelect = document.getElementById('clients-province-filter');
+  const searchInput = document.getElementById('clients-search');
+  const clearBtn = document.getElementById('clients-clear');
+
+  if (agentSelect) agentSelect.value = 'ALL';
+  if (provSelect) provSelect.value = 'ALL';
+  if (searchInput) searchInput.value = '';
+  if (clearBtn) clearBtn.style.display = 'none';
+
+  clientsState.q = '';
+  clientsState.agent = 'ALL';
+  clientsState.province = 'ALL';
+  clientsState.offset = 0;
+  fetchClients();
+}
+
 function onClientsSearch(val) {
   const clearBtn = document.getElementById('clients-clear');
   clearBtn.style.display = val ? 'flex' : 'none';
@@ -396,15 +455,22 @@ async function fetchClients() {
   container.innerHTML = '<div class="loading-spinner">Ricerca clienti in corso...</div>';
 
   try {
-    const qParam = clientsState.q ? `&q=${encodeURIComponent(clientsState.q)}` : '';
-    const res = await authFetch(`/api/clients?limit=${clientsState.limit}&offset=${clientsState.offset}${qParam}`);
+    const params = new URLSearchParams({
+      limit: clientsState.limit,
+      offset: clientsState.offset
+    });
+    if (clientsState.q) params.append('q', clientsState.q);
+    if (clientsState.agent && clientsState.agent !== 'ALL') params.append('agent', clientsState.agent);
+    if (clientsState.province && clientsState.province !== 'ALL') params.append('province', clientsState.province);
+
+    const res = await authFetch(`/api/clients?${params.toString()}`);
     const data = await res.json();
 
     clientsState.total = data.total;
     document.getElementById('clients-count-badge').textContent = `${formatNumber(data.total)} clienti trovati`;
 
     if (!data.items || data.items.length === 0) {
-      container.innerHTML = '<div class="empty-state">Nessun cliente trovato</div>';
+      container.innerHTML = '<div class="empty-state">Nessun cliente trovato con i filtri selezionati</div>';
       renderPagination('clients-pagination', 0, 0, 0, () => {});
       return;
     }
@@ -423,7 +489,10 @@ async function fetchClients() {
 
 function renderClientCardHtml(client) {
   const phone = client.phone || client.mobile || '';
-  const city = client.city || 'Città non specificata';
+  const city = client.city || 'Città n.d.';
+  const prov = client.province ? `(${client.province})` : '';
+  const fullAddress = [client.address, city, prov].filter(Boolean).join(' - ');
+
   const ordersBadge = client.orders_count > 0 
     ? `<span class="badge badge-blue">${client.orders_count} ordini 2026</span>` 
     : `<span class="badge badge-gray">Nessun ordine</span>`;
@@ -432,25 +501,36 @@ function renderClientCardHtml(client) {
     ? `<span class="badge badge-yellow">${client.pending_orders_count} da evadere</span>`
     : '';
 
+  const agentBadge = client.agent_name
+    ? `<span class="badge badge-purple" style="background:#f3e8ff; color:#7e22ce; font-weight:600;">👤 ${client.agent_name}</span>`
+    : '';
+
+  const provBadge = client.province
+    ? `<span class="badge badge-blue" style="background:#e0f2fe; color:#0369a1; font-weight:700;">📍 ${client.province}</span>`
+    : '';
+
   return `
     <div class="item-card" onclick="openClientDetail('${client.code}')">
       <div class="card-top">
         <div>
           <div class="card-title">${client.name}</div>
-          <div class="card-subtitle">📍 ${city} &bull; Cod: <strong>${client.code}</strong></div>
+          <div class="card-subtitle">📍 ${fullAddress} &bull; Cod: <strong>${client.code}</strong></div>
         </div>
       </div>
 
       <div class="card-badges">
+        ${agentBadge}
+        ${provBadge}
         ${ordersBadge}
         ${pendingBadge}
-        ${client.vat ? `<span class="badge badge-gray">P.IVA: ${client.vat}</span>` : ''}
+        ${client.email ? `<span class="badge badge-gray" style="text-transform:lowercase;">✉️ ${client.email}</span>` : ''}
       </div>
 
       <div class="card-actions" onclick="event.stopPropagation()">
         ${phone ? `<a href="tel:${phone}" class="action-btn action-call">📞 Chiama (${phone})</a>` : ''}
-        ${client.city ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(client.name + ' ' + client.city)}" target="_blank" class="action-btn action-map">🗺️ Mappa</a>` : ''}
-        <button class="action-btn action-email" onclick="openClientDetail('${client.code}')">📄 Scheda Completa</button>
+        ${client.email ? `<a href="mailto:${client.email}" class="action-btn action-email">✉️ Email</a>` : ''}
+        ${client.city ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(client.name + ' ' + (client.address || '') + ' ' + client.city)}" target="_blank" class="action-btn action-map">🗺️ Mappa</a>` : ''}
+        <button class="action-btn action-email" onclick="openClientDetail('${client.code}')">📄 Scheda</button>
       </div>
     </div>
   `;
@@ -462,12 +542,17 @@ async function openClientDetail(code) {
 
   document.getElementById('modal-client-name').textContent = 'Caricamento...';
   document.getElementById('modal-client-code').textContent = code;
+  document.getElementById('modal-client-agent').textContent = '-';
   document.getElementById('modal-client-city').textContent = '-';
-  document.getElementById('modal-client-vat').textContent = '-';
+  document.getElementById('modal-client-address').textContent = '-';
+  document.getElementById('modal-client-email').textContent = '-';
   document.getElementById('modal-client-phone').textContent = '-';
   document.getElementById('modal-client-mobile').textContent = '-';
+  document.getElementById('modal-client-contact').textContent = '-';
+  document.getElementById('modal-client-vat').textContent = '-';
   document.getElementById('modal-client-actions').innerHTML = '';
   document.getElementById('modal-client-orders-list').innerHTML = '<div class="loading-spinner">Caricamento ordini...</div>';
+  document.getElementById('modal-client-transports-list').innerHTML = '<div class="loading-spinner">Caricamento trasporti...</div>';
 
   try {
     const res = await authFetch(`/api/clients/${code}`);
@@ -476,10 +561,20 @@ async function openClientDetail(code) {
 
     document.getElementById('modal-client-name').textContent = c.name + (c.name2 ? ' - ' + c.name2 : '');
     document.getElementById('modal-client-code').textContent = `Cod. ${c.code}`;
-    document.getElementById('modal-client-city').textContent = c.city || '-';
-    document.getElementById('modal-client-vat').textContent = c.vat || c.tax_code || '-';
+    document.getElementById('modal-client-agent').textContent = c.agent_name || 'Nessun agente assegnato';
+    document.getElementById('modal-client-city').textContent = `${c.city || '-'} ${c.province ? '(' + c.province + ')' : ''}`;
+    document.getElementById('modal-client-address').textContent = `${c.address || '-'} ${c.cap ? 'CAP ' + c.cap : ''}`;
+    
+    if (c.email) {
+      document.getElementById('modal-client-email').innerHTML = `<a href="mailto:${c.email}" style="color:var(--primary); font-weight:600;">${c.email}</a>`;
+    } else {
+      document.getElementById('modal-client-email').textContent = '-';
+    }
+
     document.getElementById('modal-client-phone').textContent = c.phone || '-';
     document.getElementById('modal-client-mobile').textContent = c.mobile || '-';
+    document.getElementById('modal-client-contact').textContent = c.contact || '-';
+    document.getElementById('modal-client-vat').textContent = c.vat || c.tax_code || '-';
 
     let actionButtons = '';
     if (c.phone || c.mobile) {
@@ -489,11 +584,40 @@ async function openClientDetail(code) {
         actionButtons += `<a href="https://wa.me/${c.mobile.replace(/\D/g, '')}" target="_blank" class="action-btn action-call" style="font-size:0.9rem; padding:8px 16px; background:#25d366; color:white;">💬 WhatsApp</a>`;
       }
     }
+    if (c.email) {
+      actionButtons += `<a href="mailto:${c.email}" class="action-btn action-email" style="font-size:0.9rem; padding:8px 16px;">✉️ Invia Email</a>`;
+    }
     if (c.city) {
-      actionButtons += `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.name + ' ' + c.city)}" target="_blank" class="action-btn action-map" style="font-size:0.9rem; padding:8px 16px;">🗺️ Indicazioni Mappa</a>`;
+      actionButtons += `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.name + ' ' + (c.address || '') + ' ' + c.city)}" target="_blank" class="action-btn action-map" style="font-size:0.9rem; padding:8px 16px;">🗺️ Indicazioni Mappa</a>`;
     }
     document.getElementById('modal-client-actions').innerHTML = actionButtons;
 
+    // Transports Section for this Client
+    const transportsCountEl = document.getElementById('modal-client-transports-count');
+    const transportsListEl = document.getElementById('modal-client-transports-list');
+    if (data.transports && data.transports.length > 0) {
+      transportsCountEl.textContent = data.transports.length;
+      transportsListEl.innerHTML = data.transports.map(t => `
+        <div class="order-mini-card">
+          <div>
+            <div style="font-weight: 700; font-size: 0.9rem;">🚚 ${formatDate(t.transport_date)} (${t.day_name || ''})</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">
+              📍 ${t.city || ''} (${t.province || ''}) &bull; Vettore: <strong>${t.carrier || 'N/D'}</strong>
+            </div>
+            ${t.notes ? `<div style="font-size: 0.75rem; color: var(--primary); font-weight: 600; margin-top:2px;">Note: ${t.notes}</div>` : ''}
+          </div>
+          <div style="text-align: right;">
+            <div style="font-weight: 800; font-size: 0.95rem;">${t.weight_kg ? t.weight_kg + ' Kg' : ''}</div>
+            <span class="badge badge-blue">${t.time_slot || 'Programmato'}</span>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      transportsCountEl.textContent = '0';
+      transportsListEl.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 10px 0;">Nessun trasporto recente programmato.</div>';
+    }
+
+    // Orders Section
     document.getElementById('modal-client-orders-count').textContent = data.summary.total_orders;
     document.getElementById('modal-client-orders-total').textContent = `Tot: ${formatCurrency(data.summary.total_amount)}`;
 
@@ -766,6 +890,136 @@ function renderOrderCardHtml(order) {
 }
 
 // ==========================================
+// TRANSPORTS TAB
+// ==========================================
+function onTransportsSearch(val) {
+  const clearBtn = document.getElementById('transports-clear');
+  clearBtn.style.display = val ? 'flex' : 'none';
+
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    transportsState.q = val.trim();
+    transportsState.offset = 0;
+    fetchTransports();
+  }, 250);
+}
+
+function clearTransportsSearch() {
+  const input = document.getElementById('transports-search');
+  input.value = '';
+  document.getElementById('transports-clear').style.display = 'none';
+  transportsState.q = '';
+  transportsState.offset = 0;
+  fetchTransports();
+}
+
+function setTransportDateFilter(val) {
+  transportsState.date_filter = val;
+  transportsState.offset = 0;
+
+  document.querySelectorAll('[data-date]').forEach(el => {
+    el.classList.toggle('active', el.getAttribute('data-date') === val);
+  });
+
+  fetchTransports();
+}
+
+function onTransportsCarrierChange() {
+  const select = document.getElementById('transports-carrier-filter');
+  transportsState.carrier = select ? select.value : 'ALL';
+  transportsState.offset = 0;
+  fetchTransports();
+}
+
+async function fetchTransports() {
+  const container = document.getElementById('transports-list');
+  container.innerHTML = '<div class="loading-spinner">Caricamento trasporti in corso...</div>';
+
+  try {
+    const params = new URLSearchParams({
+      limit: transportsState.limit,
+      offset: transportsState.offset,
+      date_filter: transportsState.date_filter
+    });
+    if (transportsState.q) params.append('q', transportsState.q);
+    if (transportsState.carrier && transportsState.carrier !== 'ALL') params.append('carrier', transportsState.carrier);
+
+    const res = await authFetch(`/api/transports?${params.toString()}`);
+    const data = await res.json();
+
+    transportsState.total = data.total;
+    document.getElementById('transports-count-badge').textContent = `${formatNumber(data.total)} trasporti`;
+
+    // Populate carriers dropdown if available and not yet populated
+    const carrierSelect = document.getElementById('transports-carrier-filter');
+    if (carrierSelect && data.carriers && carrierSelect.options.length <= 1) {
+      carrierSelect.innerHTML = '<option value="ALL">Tutti i vettori</option>' + 
+        data.carriers.map(c => `<option value="${c}">${c}</option>`).join('');
+      carrierSelect.value = transportsState.carrier;
+    }
+
+    if (!data.items || data.items.length === 0) {
+      container.innerHTML = '<div class="empty-state">Nessun trasporto trovato con i criteri selezionati</div>';
+      renderPagination('transports-pagination', 0, 0, 0, () => {});
+      return;
+    }
+
+    container.innerHTML = data.items.map(t => renderTransportCardHtml(t)).join('');
+    renderPagination('transports-pagination', transportsState.total, transportsState.limit, transportsState.offset, (newOffset) => {
+      transportsState.offset = newOffset;
+      fetchTransports();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+  } catch (err) {
+    container.innerHTML = '<div class="empty-state">Errore nel caricamento dei trasporti</div>';
+  }
+}
+
+function renderTransportCardHtml(t) {
+  const dest = [t.city, t.province ? `(${t.province})` : ''].filter(Boolean).join(' ');
+  const dateFormatted = formatDate(t.transport_date);
+  const dayStr = t.day_name ? `${t.day_name} ` : '';
+
+  return `
+    <div class="item-card">
+      <div class="card-top">
+        <div>
+          <div class="card-title">${t.client_name}</div>
+          <div class="card-subtitle">
+            📍 <strong>${dest || 'Destinazione non specificata'}</strong> &bull; Previsto: <strong>${dayStr}${dateFormatted}</strong>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          ${t.carrier ? `<span class="badge badge-blue" style="font-weight:700; font-size:0.85rem;">🚚 ${t.carrier}</span>` : '<span class="badge badge-gray">Vettore n.d.</span>'}
+        </div>
+      </div>
+
+      <div class="card-badges">
+        ${t.weight_kg ? `<span class="badge badge-gray">⚖️ Peso: <strong>${t.weight_kg} Kg</strong></span>` : ''}
+        ${t.time_slot ? `<span class="badge badge-yellow">🕒 ${t.time_slot}</span>` : ''}
+        ${t.zone ? `<span class="badge badge-gray">Zona: ${t.zone}</span>` : ''}
+        ${t.notes ? `<span class="badge badge-purple" style="background:#fef3c7; color:#92400e; font-weight:600;">📝 ${t.notes}</span>` : ''}
+      </div>
+
+      <div class="card-actions" onclick="event.stopPropagation()">
+        ${t.city ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t.client_name + ' ' + t.city)}" target="_blank" class="action-btn action-map">🗺️ Mappa Destinazione</a>` : ''}
+        <button class="action-btn action-email" onclick="searchClientFromTransport('${t.client_name.replace(/'/g, "\\'")}')">🔍 Cerca Cliente</button>
+      </div>
+    </div>
+  `;
+}
+
+function searchClientFromTransport(clientName) {
+  switchTab('clients');
+  const searchInput = document.getElementById('clients-search');
+  if (searchInput) {
+    searchInput.value = clientName;
+    onClientsSearch(clientName);
+  }
+}
+
+// ==========================================
 // ADMIN PANEL LOGIC
 // ==========================================
 function updateFileSelection(input, dropBoxId, label) {
@@ -781,7 +1035,7 @@ function updateFileSelection(input, dropBoxId, label) {
 }
 
 function resetFileSelections() {
-  ['anagra', 'artico', 'seor', 'listino'].forEach(key => {
+  ['anagra', 'artico', 'seor', 'listino', 'trasporti'].forEach(key => {
     const input = document.getElementById(`file-${key}`);
     const dropBox = document.getElementById(`drop-${key}`);
     const nameEl = document.getElementById(`name-${key}`);
@@ -793,7 +1047,7 @@ function resetFileSelections() {
 
 async function handleExcelUpload(e) {
   e.preventDefault();
-  const inputs = ['file-anagra', 'file-artico', 'file-seor', 'file-listino'];
+  const inputs = ['file-anagra', 'file-artico', 'file-seor', 'file-listino', 'file-trasporti'];
   const formData = new FormData();
   let fileCount = 0;
 

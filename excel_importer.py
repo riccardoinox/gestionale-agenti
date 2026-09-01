@@ -107,10 +107,55 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
         wb_list.close()
     print(f"Loaded {len(price_map)} prices from listino.")
 
-    # 2. Read and Import Clients (ANAGRA)
+    # 2. Read and Import Clients (Tab1.xlsx or ANAGRA.xlsx fallback)
     total_clients = 0
-    if os.path.exists(anagra_path):
-        print(f"Importing Clients from: {anagra_path}")
+    tab1_path = os.path.join(base_dir, "Tab1.xlsx")
+    
+    if os.path.exists(tab1_path):
+        print(f"Importing Clients from Tab1.xlsx: {tab1_path}")
+        wb_tab1 = openpyxl.load_workbook(tab1_path, read_only=True, data_only=True)
+        ws_tab1 = wb_tab1.active
+        
+        client_rows = []
+        for i, row in enumerate(ws_tab1.iter_rows(values_only=True)):
+            if i == 0 or not row or row[0] is None:
+                continue
+            name = safe_str(row[0])
+            code = safe_str(row[8]) if len(row) > 8 else ""
+            if not code or not name or code.lower() == "conto":
+                continue
+            
+            # Exclude clients whose name or code starts with $
+            if is_excluded_client(name, code):
+                continue
+
+            province = safe_str(row[1]).upper() if len(row) > 1 else ""
+            address = safe_str(row[2]) if len(row) > 2 else ""
+            city = safe_str(row[3]) if len(row) > 3 else ""
+            email = safe_str(row[4]) if len(row) > 4 else ""
+            phone = safe_str(row[5]) if len(row) > 5 else ""
+            date_acq = safe_date_iso(row[6]) if len(row) > 6 else ""
+            contact = safe_str(row[7]) if len(row) > 7 else ""
+            agent_name = safe_str(row[9]) if len(row) > 9 else ""
+            cap = safe_str(row[10]) if len(row) > 10 else ""
+            mobile = safe_str(row[11]) if len(row) > 11 else ""
+
+            client_rows.append((
+                code, name, "", city, province, address, cap, email, agent_name,
+                mobile, phone, "", "", "", contact, "", "", "", date_acq
+            ))
+
+        cursor.execute("DELETE FROM clients")
+        cursor.executemany("""
+            INSERT OR REPLACE INTO clients (
+                code, name, name2, city, province, address, cap, email, agent_name,
+                mobile, phone, fax, vat, tax_code, contact, first_name, last_name, subject_type, date_acq
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, client_rows)
+        total_clients = len(client_rows)
+        wb_tab1.close()
+    elif os.path.exists(anagra_path):
+        print(f"Importing Clients from legacy ANAGRA.xlsx: {anagra_path}")
         wb_anagra = openpyxl.load_workbook(anagra_path, read_only=True, data_only=True)
         ws_anagra = wb_anagra.active
         
@@ -123,8 +168,6 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
                 continue
             
             name = safe_str(row[1])
-            
-            # Exclude clients whose name starts with $, $$, $$$ or other test symbols
             if is_excluded_client(name, code):
                 continue
 
@@ -141,14 +184,16 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
             last_name = safe_str(row[16]) if len(row) > 16 else ""
 
             client_rows.append((
-                code, name, name2, city, mobile, phone, fax, vat, tax_code, contact, first_name, last_name, subject_type
+                code, name, name2, city, "", "", "", "", "",
+                mobile, phone, fax, vat, tax_code, contact, first_name, last_name, subject_type, ""
             ))
 
         cursor.execute("DELETE FROM clients")
         cursor.executemany("""
             INSERT OR REPLACE INTO clients (
-                code, name, name2, city, mobile, phone, fax, vat, tax_code, contact, first_name, last_name, subject_type
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                code, name, name2, city, province, address, cap, email, agent_name,
+                mobile, phone, fax, vat, tax_code, contact, first_name, last_name, subject_type, date_acq
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, client_rows)
         total_clients = len(client_rows)
         wb_anagra.close()
@@ -158,58 +203,59 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
     total_articles = 0
     if os.path.exists(artico_path):
         print(f"Importing Articles from: {artico_path}")
-        wb_art = openpyxl.load_workbook(artico_path, read_only=True, data_only=True)
-        ws_art = wb_art.active
+        wb_artico = openpyxl.load_workbook(artico_path, read_only=True, data_only=True)
+        ws_artico = wb_artico.active
         
         article_rows = []
-        for i, row in enumerate(ws_art.iter_rows(values_only=True)):
+        for i, row in enumerate(ws_artico.iter_rows(values_only=True)):
             if i == 0 or not row or row[0] is None:
                 continue
             code = safe_str(row[0])
-            if not code or code.lower() == "codice articolo":
+            if not code or code.lower() == "codice":
                 continue
-            
-            # Filter out internal/excluded article codes
+
             if is_excluded_article(code):
                 continue
 
-            desc = safe_str(row[1]) if len(row) > 1 else ""
-            disp_netta = safe_float(row[2]) if len(row) > 2 else 0.0
-            ordinato = safe_float(row[3]) if len(row) > 3 else 0.0
-            prenotato = safe_float(row[4]) if len(row) > 4 else 0.0
-            impegnato = safe_float(row[5]) if len(row) > 5 else 0.0
-            esistenza = safe_float(row[6]) if len(row) > 6 else 0.0
-            esistenza_conv = safe_float(row[7]) if len(row) > 7 else 0.0
-            es_imp = safe_float(row[8]) if len(row) > 8 else 0.0
+            description = safe_str(row[1])
+            disp_netta = safe_float(row[2], 0.0)
+            ordinato = safe_float(row[3], 0.0)
+            prenotato = safe_float(row[4], 0.0)
+            impegnato = safe_float(row[5], 0.0)
+            esistenza = safe_float(row[6], 0.0)
+            esistenza_conv = safe_float(row[7], 0.0)
+            es_imp = safe_float(row[8], 0.0)
             cod_altern = safe_str(row[9]) if len(row) > 9 else ""
-            um = safe_str(row[10]) if len(row) > 10 else ""
-            disponib = safe_float(row[11]) if len(row) > 11 else 0.0
-            ultimo_costo = safe_float(row[12]) if len(row) > 12 else 0.0
-            conv = safe_float(row[13]) if len(row) > 13 else 0.0
+            um = safe_str(row[10]) if len(row) > 10 else "PZ"
+            disponib = safe_float(row[11], 0.0) if len(row) > 11 else 0.0
+            ultimo_costo = safe_float(row[12], 0.0) if len(row) > 12 else 0.0
+            conv = safe_float(row[13], 1.0) if len(row) > 13 else 1.0
             descr2 = safe_str(row[14]) if len(row) > 14 else ""
-            art_sostitutivo = safe_str(row[15]) if len(row) > 15 else ""
-            art_sostituito = safe_str(row[16]) if len(row) > 16 else ""
-            in_esaurim = safe_str(row[17]) if len(row) > 17 else ""
-            a_listino = safe_str(row[18]) if len(row) > 18 else ""
-            
-            listino_prezzo = price_map.get(code.upper(), 0.0)
+            art_sostitutivo = safe_str(row[17]) if len(row) > 17 else ""
+            art_sostituito = safe_str(row[18]) if len(row) > 18 else ""
+            in_esaurim = safe_str(row[19]).upper() if len(row) > 19 else "N"
+            a_listino = safe_str(row[20]).upper() if len(row) > 20 else "S"
+
+            price = price_map.get(code.upper(), 0.0)
 
             article_rows.append((
-                code, desc, disp_netta, ordinato, prenotato, impegnato, esistenza, esistenza_conv,
-                es_imp, cod_altern, um, disponib, ultimo_costo, conv, descr2, art_sostitutivo,
-                art_sostituito, in_esaurim, a_listino, listino_prezzo
+                code, description, disp_netta, ordinato, prenotato, impegnato,
+                esistenza, esistenza_conv, es_imp, cod_altern, um, disponib,
+                ultimo_costo, conv, descr2, art_sostitutivo, art_sostituito,
+                in_esaurim, a_listino, price
             ))
 
         cursor.execute("DELETE FROM articles")
         cursor.executemany("""
             INSERT OR REPLACE INTO articles (
-                code, description, disp_netta, ordinato, prenotato, impegnato, esistenza, esistenza_conv,
-                es_imp, cod_altern, um, disponib, ultimo_costo, conv, descr2, art_sostitutivo,
-                art_sostituito, in_esaurim, a_listino, listino_prezzo
+                code, description, disp_netta, ordinato, prenotato, impegnato,
+                esistenza, esistenza_conv, es_imp, cod_altern, um, disponib,
+                ultimo_costo, conv, descr2, art_sostitutivo, art_sostituito,
+                in_esaurim, a_listino, listino_prezzo
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, article_rows)
         total_articles = len(article_rows)
-        wb_art.close()
+        wb_artico.close()
     print(f"Imported {total_articles} articles.")
 
     # 4. Read and Import Orders (SEOR)
@@ -218,23 +264,23 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
         print(f"Importing Orders from: {seor_path}")
         wb_seor = openpyxl.load_workbook(seor_path, read_only=True, data_only=True)
         ws_seor = wb_seor.active
-
+        
         order_rows = []
         for i, row in enumerate(ws_seor.iter_rows(values_only=True)):
-            if i == 0 or not row or len(row) < 3:
+            if i == 0 or not row or row[0] is None:
                 continue
             year = safe_int(row[0], 2026)
             series = safe_str(row[1])
-            number = safe_int(row[2])
+            number = safe_int(row[2], 0)
             if number == 0:
                 continue
-            
-            order_id = f"{year}-{series.strip() or '0'}-{number}"
-            order_date = safe_date_iso(row[3]) if len(row) > 3 else ""
-            client_code = safe_str(row[4]) if len(row) > 4 else ""
-            client_name = safe_str(row[5]) if len(row) > 5 else ""
-            delivery_date = safe_date_iso(row[6]) if len(row) > 6 else ""
-            total_amount = safe_float(row[7]) if len(row) > 7 else 0.0
+
+            order_id = f"{year}_{series}_{number}".replace(" ", "")
+            order_date = safe_date_iso(row[3])
+            client_code = safe_str(row[4])
+            client_name = safe_str(row[5])
+            delivery_date = safe_date_iso(row[6])
+            total_amount = safe_float(row[7], 0.0)
             evaso = safe_str(row[8]).upper() if len(row) > 8 else "N"
             confermato = safe_str(row[9]).upper() if len(row) > 9 else "N"
             dest_code = safe_str(row[10]) if len(row) > 10 else ""
@@ -263,11 +309,64 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
         wb_seor.close()
     print(f"Imported {total_orders} orders.")
 
+    # 5. Read and Import Transports (TRASPORTI_2024.xlsx or similar)
+    total_transports = 0
+    trasporti_path = None
+    for fname in os.listdir(base_dir):
+        if fname.lower().startswith("trasporti") and fname.endswith(".xlsx"):
+            trasporti_path = os.path.join(base_dir, fname)
+            break
+
+    if trasporti_path and os.path.exists(trasporti_path):
+        print(f"Importing Transports from: {trasporti_path}")
+        wb_trans = openpyxl.load_workbook(trasporti_path, read_only=True, data_only=True)
+        transport_rows = []
+
+        for sname in wb_trans.sheetnames:
+            # Import sheets of year 2026
+            if "2026" not in sname.upper():
+                continue
+            
+            ws = wb_trans[sname]
+            for i, row in enumerate(ws.iter_rows(values_only=True)):
+                if i == 0 or not row:
+                    continue
+                client_name = safe_str(row[3]) if len(row) > 3 else ""
+                if not client_name or client_name.lower() == "cliente (destinazione)":
+                    continue
+
+                day_name = safe_str(row[0]) if len(row) > 0 else ""
+                transport_date = safe_date_iso(row[1]) if len(row) > 1 else ""
+                time_slot = safe_str(row[2]) if len(row) > 2 else ""
+                city = safe_str(row[5]) if len(row) > 5 else ""
+                province = safe_str(row[6]).upper() if len(row) > 6 else ""
+                weight_kg = safe_float(row[7], 0.0) if len(row) > 7 else 0.0
+                carrier = safe_str(row[8]) if len(row) > 8 else ""
+                notes = safe_str(row[9]) if len(row) > 9 else ""
+                zone = safe_str(row[10]) if len(row) > 10 else ""
+                charge = safe_float(row[11], 0.0) if len(row) > 11 else 0.0
+
+                transport_rows.append((
+                    transport_date, day_name, time_slot, client_name,
+                    city, province, weight_kg, carrier, notes, zone, charge, sname
+                ))
+
+        cursor.execute("DELETE FROM transports")
+        cursor.executemany("""
+            INSERT INTO transports (
+                transport_date, day_name, time_slot, client_name,
+                city, province, weight_kg, carrier, notes, zone, charge, sheet_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, transport_rows)
+        total_transports = len(transport_rows)
+        wb_trans.close()
+        print(f"Imported {total_transports} transports.")
+
     # Record sync log
     cursor.execute("""
         INSERT INTO sync_logs (source, status, total_clients, total_articles, total_orders, total_prices, details)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, ("Excel Import", "SUCCESS", total_clients, total_articles, total_orders, len(price_map), "Import completed successfully"))
+    """, ("Excel Import", "SUCCESS", total_clients, total_articles, total_orders, len(price_map), f"Clienti: {total_clients}, Trasporti: {total_transports}"))
 
     conn.commit()
     conn.close()
@@ -278,6 +377,7 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
         "articles": total_articles,
         "orders": total_orders,
         "prices": len(price_map),
+        "transports": total_transports,
         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
