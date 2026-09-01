@@ -9,7 +9,3 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.8
-      - key: DRIVE_FOLDER_URL
-        value: https://drive.google.com/drive/folders/1IpEMQjuEiRjJ19bpvjo8Ql7qH_Qcnl0Y
-      - key: APP_PIN
-        value: "1234" # Cambia questo PIN a tuo piacimento

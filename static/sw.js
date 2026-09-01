@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestionale-v2';
+const CACHE_NAME = 'gestionale-v3';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
@@ -16,7 +16,14 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Always network-first so changes are immediate
+  const url = new URL(e.request.url);
+  
+  // Never cache API calls to ensure always-fresh live database responses
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  // Network-first for UI static assets
   e.respondWith(
     fetch(e.request)
       .then((networkResponse) => {

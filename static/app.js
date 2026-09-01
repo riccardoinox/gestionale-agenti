@@ -287,41 +287,6 @@ async function loadDashboardOrders() {
   }
 }
 
-// ==========================================
-// SYNCHRONIZATION
-// ==========================================
-async function triggerSync() {
-  const btn = document.getElementById('admin-sync-btn') || document.getElementById('sync-btn');
-  const icon = document.getElementById('admin-sync-icon') || document.getElementById('sync-icon');
-  
-  if (btn) btn.disabled = true;
-  if (icon) icon.classList.add('spin');
-  showToast('Sincronizzazione in corso da Google Drive...', 'info');
-
-  try {
-    const res = await authFetch('/api/sync', { method: 'POST' });
-    const data = await res.json();
-
-    if (data.status === 'success' || data.drive_success) {
-      showToast(`Aggiornato! ${data.clients} clienti, ${data.articles} articoli, ${data.orders} ordini`, 'success');
-    } else {
-      showToast(`Sync completato: ${data.clients} clienti caricati`, 'warning');
-    }
-
-    fetchStats();
-    if (currentTab === 'clients') fetchClients();
-    if (currentTab === 'articles') fetchArticles();
-    if (currentTab === 'orders') fetchOrders();
-    if (currentTab === 'dashboard') loadDashboardOrders();
-    if (currentTab === 'admin') loadAdminLogs();
-
-  } catch (err) {
-    showToast('Errore durante la sincronizzazione', 'error');
-  } finally {
-    if (btn) btn.disabled = false;
-    if (icon) icon.classList.remove('spin');
-  }
-}
 
 // ==========================================
 // OMNI SEARCH (DASHBOARD)

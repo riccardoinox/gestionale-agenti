@@ -18,6 +18,7 @@ def run_update():
     files_to_check = ["Tab1.xlsx", "ANAGRA.xlsx", "ARTICO.xlsx", "SEOR.xlsx", "TRASPORTI_2024.xlsx"]
     
     copied = 0
+    copied_files = set()
     for fname in files_to_check:
         src = os.path.join(desktop, fname)
         if os.path.exists(src):
@@ -25,16 +26,18 @@ def run_update():
             shutil.copy2(src, dst)
             print(f"   [OK] Trovato e aggiornato: {fname}")
             copied += 1
+            copied_files.add(fname.lower())
             
     # Check Listino and Trasporti variants
     for item in os.listdir(desktop):
         item_lower = item.lower()
-        if (item_lower.startswith("nuovo listino") or item_lower.startswith("trasporti")) and item.endswith(".xlsx"):
+        if item_lower not in copied_files and (item_lower.startswith("nuovo listino") or item_lower.startswith("trasporti")) and item.endswith(".xlsx"):
             src = os.path.join(desktop, item)
             dst = os.path.join(base_dir, item)
             shutil.copy2(src, dst)
             print(f"   [OK] Trovato e aggiornato: {item}")
             copied += 1
+            copied_files.add(item_lower)
 
     print(f"\n2. Elaborazione e pulizia dati (filtri clienti $ e codici interni)...")
     res = import_all_excel_data(base_dir)
