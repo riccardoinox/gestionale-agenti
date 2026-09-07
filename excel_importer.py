@@ -265,6 +265,10 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
         wb_seor = openpyxl.load_workbook(seor_path, read_only=True, data_only=True)
         ws_seor = wb_seor.active
         
+        # Build client-to-agent lookup map
+        cursor.execute("SELECT code, agent_name FROM clients")
+        client_agent_map = {str(r[0]): (r[1] or "NO AGENT") for r in cursor.fetchall()}
+
         order_rows = []
         for i, row in enumerate(ws_seor.iter_rows(values_only=True)):
             if i == 0 or not row or row[0] is None:
@@ -290,11 +294,12 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
             aperto = safe_str(row[23]).upper() if len(row) > 23 else "N"
             sospeso = safe_str(row[24]).upper() if len(row) > 24 else "N"
             warehouse = safe_str(row[26]) if len(row) > 26 else ""
+            agent_name = client_agent_map.get(client_code, "NO AGENT")
 
             order_rows.append((
                 order_id, year, series, number, order_date, client_code, client_name,
                 delivery_date, total_amount, evaso, confermato, dest_code, dest_desc,
-                reference, doc_type, aperto, sospeso, warehouse
+                reference, doc_type, aperto, sospeso, warehouse, agent_name
             ))
 
         cursor.execute("DELETE FROM orders")
@@ -302,9 +307,17 @@ def import_all_excel_data(base_dir: str = None) -> Dict[str, Any]:
             INSERT OR REPLACE INTO orders (
                 id, year, series, number, order_date, client_code, client_name,
                 delivery_date, total_amount, evaso, confermato, dest_code, dest_desc,
-                reference, doc_type, aperto, sospeso, warehouse
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                reference, doc_type, aperto, sospeso, warehouse, agent_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, order_rows)
+
+        # Synchronize any missing agents
+        cursor.execute("""
+            UPDATE orders 
+            SET agent_name = COALESCE((SELECT agent_name FROM clients WHERE clients.code = orders.client_code), 'NO AGENT')
+            WHERE agent_name IS NULL OR agent_name = ''
+        """)
+
         total_orders = len(order_rows)
         wb_seor.close()
     print(f"Imported {total_orders} orders.")

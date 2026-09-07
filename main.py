@@ -584,6 +584,7 @@ def get_article_detail(code: str, role: str = Depends(require_auth)):
 def get_orders(
     q: Optional[str] = Query(None, description="Search term for client name, reference, order number"),
     evaso: Optional[str] = Query("all", description="all, N (da evadere), S (evaso), P (parziale)"),
+    agent: Optional[str] = Query("ALL", description="Filter by agent name"),
     client_code: Optional[str] = Query(None, description="Filter by client code"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -604,16 +605,25 @@ def get_orders(
         where_clauses.append("evaso = ?")
         params.append(evaso.upper())
 
+    if agent and isinstance(agent, str) and agent.upper() != "ALL":
+        if agent in ("NO AGENT", "NO_AGENT"):
+            where_clauses.append("(agent_name = 'NO AGENT' OR agent_name IS NULL OR agent_name = '')")
+        else:
+            where_clauses.append("agent_name = ?")
+            params.append(agent)
+
     if client_code and isinstance(client_code, str):
         where_clauses.append("client_code = ?")
         params.append(client_code)
 
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-    # Count total
-    count_sql = f"SELECT COUNT(*) FROM orders {where_sql}"
+    # Count total and sum amount
+    count_sql = f"SELECT COUNT(*), COALESCE(SUM(total_amount), 0) FROM orders {where_sql}"
     cursor.execute(count_sql, params)
-    total_count = cursor.fetchone()[0]
+    count_row = cursor.fetchone()
+    total_count = count_row[0]
+    total_amount = count_row[1]
 
     lim = safe_int_param(limit, 50)
     off = safe_int_param(offset, 0)
@@ -633,10 +643,21 @@ def get_orders(
 
     return {
         "total": total_count,
+        "total_amount": round(total_amount, 2),
         "limit": lim,
         "offset": off,
         "items": orders
     }
+
+@app.get("/api/orders/filters")
+def get_order_filters(role: str = Depends(require_auth)):
+    """Returns sorted lists of distinct agents present in orders for UI dropdown."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT agent_name FROM orders WHERE agent_name != '' AND agent_name IS NOT NULL ORDER BY agent_name ASC")
+    agents = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return {"agents": agents}
 
 @app.get("/api/sync/logs")
 def get_sync_logs(limit: int = 10, role: str = Depends(require_auth)):

@@ -5,7 +5,7 @@ let currentRole = null;
 
 let clientsState = { q: '', agent: 'ALL', province: 'ALL', offset: 0, limit: 30, total: 0 };
 let articlesState = { q: '', stock_filter: 'all', offset: 0, limit: 30, total: 0 };
-let ordersState = { q: '', evaso: 'all', offset: 0, limit: 30, total: 0 };
+let ordersState = { q: '', evaso: 'all', agent: 'ALL', offset: 0, limit: 30, total: 0 };
 let transportsState = { q: '', date_filter: 'all', exact_date: '', carrier: 'ALL', offset: 0, limit: 30, total: 0 };
 
 let deferredPrompt = null;
@@ -353,6 +353,12 @@ async function loadClientFilters() {
     const agentSelect = document.getElementById('clients-agent-filter');
     if (agentSelect && data.agents) {
       agentSelect.innerHTML = '<option value="ALL">Tutti gli agenti</option>' + 
+        data.agents.map(a => `<option value="${a}">${a}</option>`).join('');
+    }
+
+    const ordersAgentSelect = document.getElementById('orders-agent-filter');
+    if (ordersAgentSelect && data.agents) {
+      ordersAgentSelect.innerHTML = '<option value="ALL">Tutti gli agenti</option>' + 
         data.agents.map(a => `<option value="${a}">${a}</option>`).join('');
     }
 
@@ -800,6 +806,21 @@ function clearOrdersSearch() {
   fetchOrders();
 }
 
+function onOrdersAgentChange() {
+  const agentSelect = document.getElementById('orders-agent-filter');
+  ordersState.agent = agentSelect ? agentSelect.value : 'ALL';
+  ordersState.offset = 0;
+  fetchOrders();
+}
+
+function resetOrdersAgentFilter() {
+  const agentSelect = document.getElementById('orders-agent-filter');
+  if (agentSelect) agentSelect.value = 'ALL';
+  ordersState.agent = 'ALL';
+  ordersState.offset = 0;
+  fetchOrders();
+}
+
 function setOrderFilter(evasoVal) {
   ordersState.evaso = evasoVal;
   ordersState.offset = 0;
@@ -821,16 +842,26 @@ async function fetchOrders() {
   container.innerHTML = '<div class="loading-spinner">Ricerca ordini...</div>';
 
   try {
-    const qParam = ordersState.q ? `&q=${encodeURIComponent(ordersState.q)}` : '';
-    const filterParam = `&evaso=${ordersState.evaso}`;
-    const res = await authFetch(`/api/orders?limit=${ordersState.limit}&offset=${ordersState.offset}${qParam}${filterParam}`);
+    const params = new URLSearchParams({
+      limit: ordersState.limit,
+      offset: ordersState.offset
+    });
+    if (ordersState.q) params.append('q', ordersState.q);
+    if (ordersState.evaso && ordersState.evaso !== 'all') params.append('evaso', ordersState.evaso);
+    if (ordersState.agent && ordersState.agent !== 'ALL') params.append('agent', ordersState.agent);
+
+    const res = await authFetch(`/api/orders?${params.toString()}`);
     const data = await res.json();
 
     ordersState.total = data.total;
-    document.getElementById('orders-count-badge').textContent = `${formatNumber(data.total)} ordini`;
+    const countBadge = document.getElementById('orders-count-badge');
+    if (countBadge) countBadge.textContent = `${formatNumber(data.total)} ordini`;
+
+    const amountBadge = document.getElementById('orders-total-amount-badge');
+    if (amountBadge) amountBadge.textContent = `Totale: ${formatCurrency(data.total_amount || 0)}`;
 
     if (!data.items || data.items.length === 0) {
-      container.innerHTML = '<div class="empty-state">Nessun ordine trovato</div>';
+      container.innerHTML = '<div class="empty-state">Nessun ordine trovato con i filtri selezionati</div>';
       renderPagination('orders-pagination', 0, 0, 0, () => {});
       return;
     }
@@ -855,6 +886,10 @@ function renderEvasoBadge(evaso) {
 }
 
 function renderOrderCardHtml(order) {
+  const agentBadge = order.agent_name && order.agent_name !== 'NO AGENT'
+    ? `<span class="badge badge-purple" style="background:#f3e8ff; color:#7e22ce; font-weight:700;">👤 ${order.agent_name}</span>`
+    : (order.agent_name === 'NO AGENT' ? `<span class="badge badge-gray" style="font-size:0.75rem;">Senza Agente</span>` : '');
+
   return `
     <div class="item-card" onclick="openClientDetail('${order.client_code}')">
       <div class="card-top">
@@ -871,6 +906,7 @@ function renderOrderCardHtml(order) {
       </div>
 
       <div class="card-badges">
+        ${agentBadge}
         ${order.delivery_date ? `<span class="badge badge-gray">📅 Consegna: ${formatDate(order.delivery_date)}</span>` : ''}
         ${order.reference ? `<span class="badge badge-blue">Rif: ${order.reference}</span>` : ''}
         ${order.warehouse ? `<span class="badge badge-gray">Mag: ${order.warehouse}</span>` : ''}

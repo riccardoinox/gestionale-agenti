@@ -103,8 +103,22 @@ def init_db():
         aperto TEXT,
         sospeso TEXT,
         warehouse TEXT,
+        agent_name TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
+    """)
+
+    # Ensure agent_name exists on orders if previously created
+    try:
+        cursor.execute("ALTER TABLE orders ADD COLUMN agent_name TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    # Ensure agent_name on orders is populated from clients table
+    cursor.execute("""
+        UPDATE orders 
+        SET agent_name = COALESCE((SELECT agent_name FROM clients WHERE clients.code = orders.client_code), 'NO AGENT')
+        WHERE agent_name IS NULL OR agent_name = ''
     """)
 
     # Transports table
@@ -166,6 +180,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_client ON orders(client_code)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(order_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_evaso ON orders(evaso)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_agent ON orders(agent_name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_client ON transports(client_name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_date ON transports(transport_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_carrier ON transports(carrier)")
