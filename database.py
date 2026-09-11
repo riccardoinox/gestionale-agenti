@@ -48,12 +48,25 @@ def init_db():
         ("cap", "TEXT"),
         ("email", "TEXT"),
         ("agent_name", "TEXT"),
-        ("date_acq", "TEXT")
+        ("date_acq", "TEXT"),
+        ("turnover_2024", "REAL DEFAULT 0"),
+        ("turnover_2025", "REAL DEFAULT 0"),
+        ("turnover_2026", "REAL DEFAULT 0")
     ]:
         try:
             cursor.execute(f"ALTER TABLE clients ADD COLUMN {col} {col_type}")
         except sqlite3.OperationalError:
             pass  # Column already exists
+
+    # Client turnover history table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS client_turnover (
+        client_code TEXT,
+        year INTEGER,
+        amount REAL DEFAULT 0,
+        PRIMARY KEY (client_code, year)
+    )
+    """)
 
     # Articles table
     cursor.execute("""
@@ -185,6 +198,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_date ON transports(transport_date)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_carrier ON transports(carrier)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_transports_province ON transports(province)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_client_turnover_code ON client_turnover(client_code)")
 
     conn.commit()
     conn.close()

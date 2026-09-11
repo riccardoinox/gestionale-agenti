@@ -528,6 +528,32 @@
         </div>
       </div>
 
+      <!-- Turnover Trend Section for this Client -->
+      <div style="margin-top: 18px; background: #f8fafc; border-radius: 12px; padding: 14px; border: 1px solid #e2e8f0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="font-size: 0.95rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 6px;">
+            📊 Andamento Fatturato
+          </h3>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">Netto Merce (IVA escl.)</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; text-align: center;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">ANNO 2024</div>
+            <div id="modal-client-turnover-2024" style="font-size: 0.95rem; font-weight: 800; color: var(--text-color); margin-top: 4px;">-</div>
+          </div>
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; text-align: center; position: relative;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">ANNO 2025</div>
+            <div id="modal-client-turnover-2025" style="font-size: 0.95rem; font-weight: 800; color: var(--text-color); margin-top: 4px;">-</div>
+            <div id="modal-client-turnover-trend" style="margin-top: 2px;"></div>
+          </div>
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; text-align: center;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">ANNO 2026</div>
+            <div id="modal-client-turnover-2026" style="font-size: 0.95rem; font-weight: 800; color: var(--primary, #2563eb); margin-top: 4px;">-</div>
+            <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 600;">ad oggi</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Transports / Deliveries Section for this Client -->
       <div style="margin-top: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -542,7 +568,10 @@
       <div style="margin-top: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
           <h3 style="font-size: 0.95rem; font-weight: 700;">Ordini Anno 2026 (<span id="modal-client-orders-count">0</span>)</h3>
-          <span id="modal-client-orders-total" class="badge badge-green">Tot: € 0,00</span>
+          <div style="text-align: right;">
+            <span id="modal-client-orders-total" class="badge badge-green">Tot: € 0,00</span>
+            <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 2px;">Netto merce (IVA escl.)</div>
+          </div>
         </div>
         <div id="modal-client-orders-list" class="card-list">
           <div class="loading-spinner">Caricamento ordini...</div>

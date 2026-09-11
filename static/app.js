@@ -480,6 +480,10 @@ function renderClientCardHtml(client) {
     ? `<span class="badge badge-blue" style="background:#e0f2fe; color:#0369a1; font-weight:700;">📍 ${client.province}</span>`
     : '';
 
+  const turnoverBadge = (client.turnover_2025 && client.turnover_2025 > 0)
+    ? `<span class="badge badge-green" style="background:#ecfdf5; color:#047857; font-weight:700;">💰 Fatt. '25: ${formatCurrency(client.turnover_2025)}</span>`
+    : '';
+
   return `
     <div class="item-card" onclick="openClientDetail('${client.code}')">
       <div class="card-top">
@@ -492,6 +496,7 @@ function renderClientCardHtml(client) {
       <div class="card-badges">
         ${agentBadge}
         ${provBadge}
+        ${turnoverBadge}
         ${ordersBadge}
         ${pendingBadge}
         ${client.email ? `<span class="badge badge-gray" style="text-transform:lowercase;">✉️ ${client.email}</span>` : ''}
@@ -521,6 +526,10 @@ async function openClientDetail(code) {
   document.getElementById('modal-client-mobile').textContent = '-';
   document.getElementById('modal-client-contact').textContent = '-';
   document.getElementById('modal-client-vat').textContent = '-';
+  document.getElementById('modal-client-turnover-2024').textContent = '-';
+  document.getElementById('modal-client-turnover-2025').textContent = '-';
+  document.getElementById('modal-client-turnover-2026').textContent = '-';
+  document.getElementById('modal-client-turnover-trend').innerHTML = '';
   document.getElementById('modal-client-actions').innerHTML = '';
   document.getElementById('modal-client-orders-list').innerHTML = '<div class="loading-spinner">Caricamento ordini...</div>';
   document.getElementById('modal-client-transports-list').innerHTML = '<div class="loading-spinner">Caricamento trasporti...</div>';
@@ -546,6 +555,32 @@ async function openClientDetail(code) {
     document.getElementById('modal-client-mobile').textContent = c.mobile || '-';
     document.getElementById('modal-client-contact').textContent = c.contact || '-';
     document.getElementById('modal-client-vat').textContent = c.vat || c.tax_code || '-';
+
+    // Turnover Section
+    const turnover = data.turnover || {};
+    const t24 = turnover['2024'] || 0;
+    const t25 = turnover['2025'] || 0;
+    const t26 = turnover['2026'] || 0;
+
+    document.getElementById('modal-client-turnover-2024').textContent = t24 > 0 ? formatCurrency(t24) : '€ 0,00';
+    document.getElementById('modal-client-turnover-2025').textContent = t25 > 0 ? formatCurrency(t25) : '€ 0,00';
+    document.getElementById('modal-client-turnover-2026').textContent = t26 > 0 ? formatCurrency(t26) : '€ 0,00';
+
+    const trendEl = document.getElementById('modal-client-turnover-trend');
+    if (t24 > 0 && t25 > 0) {
+      const pct = turnover.trend_pct !== undefined ? turnover.trend_pct : (((t25 - t24) / t24) * 100).toFixed(1);
+      if (pct > 0) {
+        trendEl.innerHTML = `<span style="color: #16a34a; font-weight: 800; font-size: 0.72rem; background: #dcfce7; padding: 2px 6px; border-radius: 4px;">+${pct}% ↗</span>`;
+      } else if (pct < 0) {
+        trendEl.innerHTML = `<span style="color: #dc2626; font-weight: 800; font-size: 0.72rem; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">${pct}% ↘</span>`;
+      } else {
+        trendEl.innerHTML = `<span style="color: #64748b; font-weight: 700; font-size: 0.72rem;">= 0%</span>`;
+      }
+    } else if (t25 > 0 && t24 === 0) {
+      trendEl.innerHTML = `<span style="color: #2563eb; font-weight: 700; font-size: 0.72rem; background: #dbeafe; padding: 2px 6px; border-radius: 4px;">Nuovo</span>`;
+    } else {
+      trendEl.innerHTML = '';
+    }
 
     let actionButtons = '';
     if (c.phone || c.mobile) {
@@ -607,6 +642,7 @@ async function openClientDetail(code) {
           </div>
           <div style="text-align: right;">
             <div style="font-weight: 800; font-size: 0.95rem;">${formatCurrency(o.total_amount)}</div>
+            <div style="font-size: 0.65rem; color: var(--text-muted); margin-bottom: 2px;">netto merce</div>
             ${renderEvasoBadge(o.evaso)}
           </div>
         </div>
@@ -901,6 +937,7 @@ function renderOrderCardHtml(order) {
         </div>
         <div style="text-align: right;">
           <div style="font-size:1.1rem; font-weight:800;">${formatCurrency(order.total_amount)}</div>
+          <div style="font-size:0.68rem; color:var(--text-muted); margin-bottom:2px;">netto merce</div>
           ${renderEvasoBadge(order.evaso)}
         </div>
       </div>

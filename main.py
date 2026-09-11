@@ -410,12 +410,31 @@ def get_client_detail(code: str, role: str = Depends(require_auth)):
     """, (f"%{client_name}%", first_word, f"%{first_word}%"))
     transports = [dict(row) for row in cursor.fetchall()]
 
+    # Turnover summary
+    t2024 = round(float(client.get("turnover_2024") or 0.0), 2)
+    t2025 = round(float(client.get("turnover_2025") or 0.0), 2)
+    t2026 = round(float(client.get("turnover_2026") or 0.0), 2)
+
+    # Trend 2025 vs 2024 percentage
+    if t2024 > 0:
+        trend_pct = round(((t2025 - t2024) / t2024) * 100.0, 1)
+    elif t2025 > 0:
+        trend_pct = 100.0
+    else:
+        trend_pct = 0.0
+
     conn.close()
 
     return {
         "client": client,
         "orders": orders,
         "transports": transports,
+        "turnover": {
+            "2024": t2024,
+            "2025": t2025,
+            "2026": t2026,
+            "trend_pct": trend_pct
+        },
         "summary": {
             "total_orders": total_orders,
             "pending_orders": pending_orders,
