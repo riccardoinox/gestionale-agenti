@@ -458,6 +458,107 @@ async function fetchClients() {
   }
 }
 
+function formatLastOrderInfo(isoDateStr, isCard = false) {
+  if (!isoDateStr || String(isoDateStr).trim() === '') {
+    if (isCard) {
+      return `<span class="badge badge-gray" style="background:#f1f5f9; color:#64748b; font-weight:600;">⚪ Nessun ordine</span>`;
+    }
+    return `
+      <div style="display:flex; align-items:center; gap:10px; padding:12px 14px; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:12px;">
+        <span style="font-size:1.3rem; line-height:1;">⚪</span>
+        <div>
+          <div style="font-size:0.72rem; color:#64748b; font-weight:800; text-transform:uppercase; letter-spacing:0.5px;">Storico Ordini</div>
+          <div style="font-size:0.95rem; font-weight:700; color:#475569; margin-top:2px;">Nessun ordine registrato</div>
+        </div>
+      </div>
+    `;
+  }
+
+  const parts = String(isoDateStr).trim().split('-');
+  const orderDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  orderDate.setHours(0, 0, 0, 0);
+
+  const diffMs = today.getTime() - orderDate.getTime();
+  const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+
+  const dayStr = String(parts[2]).padStart(2, '0');
+  const monthStr = String(parts[1]).padStart(2, '0');
+  const yearStr = parts[0];
+  const formattedDate = `${dayStr}/${monthStr}/${yearStr}`;
+  const shortDate = `${dayStr}/${monthStr}/${yearStr.slice(-2)}`;
+
+  let relativeTimeText = '';
+  if (diffDays === 0) {
+    relativeTimeText = 'Oggi';
+  } else if (diffDays === 1) {
+    relativeTimeText = 'Ieri';
+  } else if (diffDays < 30) {
+    relativeTimeText = `${diffDays} giorni fa`;
+  } else if (diffDays < 60) {
+    relativeTimeText = '1 mese fa';
+  } else if (diffDays < 365) {
+    const months = Math.round(diffDays / 30.4);
+    relativeTimeText = `${months} mesi fa`;
+  } else {
+    const years = Math.floor(diffDays / 365.25);
+    relativeTimeText = years <= 1 ? '1 anno fa' : `${years} anni fa`;
+  }
+
+  let statusColor = '';
+  let statusBg = '';
+  let statusBorder = '';
+  let statusDot = '';
+  let statusLabel = '';
+  let cardClass = '';
+
+  if (diffDays <= 183) {
+    // Fino a 6 mesi fa: VERDE
+    statusDot = '🟢';
+    statusColor = '#15803d';
+    statusBg = '#dcfce7';
+    statusBorder = '#86efac';
+    statusLabel = 'Cliente Attivo';
+    cardClass = 'badge-green';
+  } else if (diffDays <= 730) {
+    // Da 6 mesi a 2 anni: GIALLO
+    statusDot = '🟡';
+    statusColor = '#b45309';
+    statusBg = '#fef3c7';
+    statusBorder = '#fde68a';
+    statusLabel = '';
+    cardClass = 'badge-yellow';
+  } else {
+    // Oltre i due anni: ROSSO
+    statusDot = '🔴';
+    statusColor = '#b91c1c';
+    statusBg = '#fee2e2';
+    statusBorder = '#fca5a5';
+    statusLabel = 'Inattivo';
+    cardClass = 'badge-red';
+  }
+
+  if (isCard) {
+    return `<span class="badge ${cardClass}" style="background:${statusBg}; color:${statusColor}; border:1px solid ${statusBorder}; font-weight:700;">${statusDot} Ult. ord: ${shortDate}</span>`;
+  }
+
+  const suffix = statusLabel ? ` - ${statusLabel}` : '';
+  return `
+    <div style="display:flex; align-items:center; gap:10px; padding:12px 14px; background:${statusBg}; border:1.5px solid ${statusBorder}; border-radius:12px;">
+      <span style="font-size:1.4rem; line-height:1;">${statusDot}</span>
+      <div style="flex:1;">
+        <div style="font-size:0.72rem; color:${statusColor}; font-weight:800; text-transform:uppercase; letter-spacing:0.5px;">
+          Ultimo Ordine a Gestionale
+        </div>
+        <div style="font-size:1rem; font-weight:800; color:${statusColor}; margin-top:2px;">
+          ${formattedDate} <span style="font-size:0.85rem; font-weight:600; opacity:0.9;">(${relativeTimeText}${suffix})</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderClientCardHtml(client) {
   const phone = client.phone || client.mobile || '';
   const city = client.city || 'Città n.d.';
@@ -484,6 +585,8 @@ function renderClientCardHtml(client) {
     ? `<span class="badge badge-green" style="background:#ecfdf5; color:#047857; font-weight:700;">💰 Fatt. '25: ${formatCurrency(client.turnover_2025)}</span>`
     : '';
 
+  const lastOrderBadge = formatLastOrderInfo(client.last_order_date, true);
+
   return `
     <div class="item-card" onclick="openClientDetail('${client.code}')">
       <div class="card-top">
@@ -497,6 +600,7 @@ function renderClientCardHtml(client) {
         ${agentBadge}
         ${provBadge}
         ${turnoverBadge}
+        ${lastOrderBadge}
         ${ordersBadge}
         ${pendingBadge}
         ${client.email ? `<span class="badge badge-gray" style="text-transform:lowercase;">✉️ ${client.email}</span>` : ''}
@@ -530,6 +634,7 @@ async function openClientDetail(code) {
   document.getElementById('modal-client-turnover-2025').textContent = '-';
   document.getElementById('modal-client-turnover-2026').textContent = '-';
   document.getElementById('modal-client-turnover-trend').innerHTML = '';
+  document.getElementById('modal-client-last-order-banner').innerHTML = '';
   document.getElementById('modal-client-actions').innerHTML = '';
   document.getElementById('modal-client-orders-list').innerHTML = '<div class="loading-spinner">Caricamento ordini...</div>';
   document.getElementById('modal-client-transports-list').innerHTML = '<div class="loading-spinner">Caricamento trasporti...</div>';
@@ -555,6 +660,9 @@ async function openClientDetail(code) {
     document.getElementById('modal-client-mobile').textContent = c.mobile || '-';
     document.getElementById('modal-client-contact').textContent = c.contact || '-';
     document.getElementById('modal-client-vat').textContent = c.vat || c.tax_code || '-';
+
+    // Last Order Status Banner
+    document.getElementById('modal-client-last-order-banner').innerHTML = formatLastOrderInfo(c.last_order_date, false);
 
     // Turnover Section
     const turnover = data.turnover || {};

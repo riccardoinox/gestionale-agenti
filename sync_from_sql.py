@@ -80,10 +80,23 @@ def sync_all_from_sql(base_dir=BASE_DIR, db_path=DB_FILE):
     lite_conn = sqlite3.connect(db_path)
     lite_cursor = lite_conn.cursor()
 
+    # Pre-calcola la data dell'ultimo ordine da testord per ciascun cliente
+    print("2. Calcolo data ultimo ordine da 'testord' (2001-2026)...")
+    sql_cursor.execute("""
+        SELECT 
+            CAST(td_conto AS VARCHAR(20)) as client_code,
+            CONVERT(VARCHAR(10), MAX(td_datord), 23) as last_order_date
+        FROM testord WITH (NOLOCK)
+        WHERE td_tipork = 'R'
+        GROUP BY td_conto
+    """)
+    last_order_map = {safe_str(r[0]): safe_str(r[1]) for r in sql_cursor.fetchall()}
+    print(f"   [OK] Trovati ultimi ordini per {len(last_order_map)} clienti.")
+
     # -------------------------------------------------------------
     # 1. ESTRAZIONE CLIENTI (anagra + tabcage)
     # -------------------------------------------------------------
-    print("2. Estrazione Clienti da 'anagra'...")
+    print("3. Estrazione Clienti da 'anagra'...")
     sql_cursor.execute("""
         SELECT 
             CAST(a.an_conto AS VARCHAR(20)) as code,
@@ -117,21 +130,22 @@ def sync_all_from_sql(base_dir=BASE_DIR, db_path=DB_FILE):
         name = safe_str(r[1])
         agent = safe_str(r[8]) or "NO AGENT"
         client_agent_map[code] = agent
+        last_ord = last_order_map.get(code, "")
 
         client_rows.append((
             code, name, safe_str(r[2]), safe_str(r[3]), safe_str(r[4]).upper(),
             safe_str(r[5]), safe_str(r[6]), safe_str(r[7]), agent,
             safe_str(r[9]), safe_str(r[10]), safe_str(r[11]), safe_str(r[12]),
             safe_str(r[13]), safe_str(r[14]), safe_str(r[15]), safe_str(r[16]),
-            safe_str(r[17]), safe_str(r[18])
+            safe_str(r[17]), safe_str(r[18]), last_ord
         ))
 
     lite_cursor.execute("DELETE FROM clients")
     lite_cursor.executemany("""
         INSERT OR REPLACE INTO clients (
             code, name, name2, city, province, address, cap, email, agent_name,
-            mobile, phone, fax, vat, tax_code, contact, first_name, last_name, subject_type, date_acq
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            mobile, phone, fax, vat, tax_code, contact, first_name, last_name, subject_type, date_acq, last_order_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, client_rows)
     print(f"   [OK] Clienti attivi caricati: {len(client_rows)}")
 

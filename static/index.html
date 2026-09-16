@@ -6,6 +6,7 @@
   <title>Gestionale Agenti</title>
   
   <!-- PWA & Mobile Optimization -->
+  <meta name="robots" content="noindex, nofollow">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#2563eb">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -15,7 +16,7 @@
   <link rel="icon" type="image/png" href="/static/favicon.png">
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/static/style.css?v=4.5">
+  <link rel="stylesheet" href="/static/style.css?v=4.6">
 </head>
 <body>
 
@@ -490,7 +491,10 @@
       </div>
 
       <!-- Quick Action Buttons -->
-      <div id="modal-client-actions" style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;"></div>
+      <div id="modal-client-actions" style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;"></div>
+
+      <!-- Last Order Status Banner -->
+      <div id="modal-client-last-order-banner" style="margin-bottom: 16px;"></div>
 
       <!-- Details -->
       <div class="detail-grid">

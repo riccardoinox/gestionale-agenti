@@ -51,7 +51,8 @@ def init_db():
         ("date_acq", "TEXT"),
         ("turnover_2024", "REAL DEFAULT 0"),
         ("turnover_2025", "REAL DEFAULT 0"),
-        ("turnover_2026", "REAL DEFAULT 0")
+        ("turnover_2026", "REAL DEFAULT 0"),
+        ("last_order_date", "TEXT")
     ]:
         try:
             cursor.execute(f"ALTER TABLE clients ADD COLUMN {col} {col_type}")
