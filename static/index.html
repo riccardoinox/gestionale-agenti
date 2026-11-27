@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Gestionale Agenti</title>
+  
+  <!-- PWA & Mobile Optimization -->
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gestionale">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="/static/style.css?v=4.6">
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- ============================================================ -->
+  <!-- LOGIN OVERLAY -->
+  <!-- ============================================================ -->
+  <div id="login-overlay" class="login-overlay" style="display: none;">
+    <div class="login-card">
+      <div class="login-logo-container">
+        <img src="/static/logo.png" alt="Inoxtubi Padova" class="login-logo-img">
+      </div>
+      <h2 style="font-size: 1.3rem; font-weight: 800; margin-bottom: 4px; color: var(--primary);">Gestionale Agenti</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted);">Inserisci la password per accedere ai dati aziendali</p>
+
+      <form onsubmit="handleLogin(event)">
+        <div class="login-input-group">
+          <input type="password" id="login-password" class="login-input" placeholder="Password di accesso..." autocomplete="current-password" required>
+          <button type="button" class="login-toggle-pwd" onclick="togglePasswordVisibility('login-password')">👁️</button>
+        </div>
+        <div id="login-error" class="login-error">Password errata. Riprova.</div>
+        <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 1rem;">
+          Accedi all'App
+        </button>
+      </form>
+      <div style="margin-top: 14px; font-size: 0.75rem; color: var(--text-muted);">
+        Accesso riservato &bull; Agenti e Amministrazione
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand">
+      <img src="/static/logo.png" alt="Inoxtubi Padova" class="brand-logo-img">
+      <div class="brand-info">
+        <span class="brand-badge">Area Agenti</span>
+        <span id="header-sync-status">Ultimo sync: Caricamento...</span>
+      </div>
+    </div>
+
+    <!-- Desktop Navigation -->
+    <nav class="desktop-nav">
+      <button class="nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+        📊 Dashboard
+      </button>
+      <button class="nav-btn" data-tab="clients" onclick="switchTab('clients')">
+        👥 Clienti
+      </button>
+      <button class="nav-btn" data-tab="articles" onclick="switchTab('articles')">
+        📦 Articoli & Listino
+      </button>
+      <button class="nav-btn" data-tab="orders" onclick="switchTab('orders')">
+        📋 Ordini 2026
+      </button>
+      <button class="nav-btn" data-tab="transports" onclick="switchTab('transports')">
+        🚚 Trasporti
+      </button>
+      <button id="nav-btn-admin" class="nav-btn" data-tab="admin" onclick="switchTab('admin')">
+        ⚙️ Gestione Admin
+      </button>
+    </nav>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <button id="theme-toggle" class="btn btn-secondary btn-icon" title="Cambia tema" onclick="toggleTheme()">
+        🌙
+      </button>
+      <button class="btn btn-secondary btn-icon" title="Esci / Logout" onclick="logout()">
+        🚪
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="app-container">
+
+    <!-- Install Banner (Mobile PWA) -->
+    <div id="pwa-install-banner" class="install-banner" style="display: none;">
+      <div>
+        <strong style="font-size: 0.95rem;">Installa l'App sul telefono</strong>
+        <div style="font-size: 0.78rem; opacity: 0.9;">Accedi rapidamente con un tocco dalla schermata home</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="promptInstallPWA()">Installa</button>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB 1: DASHBOARD -->
+    <!-- ============================================================ -->
+    <section id="tab-dashboard" class="tab-content">
+      
+      <!-- Quick Search Bar (Omni-Search) -->
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="omni-search" class="search-input" placeholder="Cerca cliente, articolo o ordine..." oninput="handleOmniSearch(this.value)">
+        <button id="omni-clear" class="search-clear-btn" onclick="clearOmniSearch()">✕</button>
+      </div>
+
+      <!-- Quick Omni-Search Results (Dropdown/List) -->
+      <div id="omni-results" style="display: none; margin-bottom: 20px;">
+        <div style="font-size: 0.85rem; font-weight: 700; margin-bottom: 8px; color: var(--text-muted);">RISULTATI RICERCA RAPIDA:</div>
+        <div id="omni-results-list" class="card-list"></div>
+      </div>
+
+      <!-- KPI Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card" onclick="switchTab('clients')">
+          <div class="stat-header">
+            <span class="stat-title">Clienti</span>
+            <div class="stat-icon" style="background: #eff6ff; color: #2563eb;">👥</div>
+          </div>
+          <div id="stat-clients" class="stat-value">-</div>
+          <div class="stat-sub">Anagrafica attiva</div>
+        </div>
+
+        <div class="stat-card" onclick="switchTab('articles')">
+          <div class="stat-header">
+            <span class="stat-title">Articoli</span>
+            <div class="stat-icon" style="background: #f0fdf4; color: #16a34a;">📦</div>
+          </div>
+          <div id="stat-articles" class="stat-value">-</div>
+          <div id="stat-articles-disp" class="stat-sub">- disponibili subito</div>
+        </div>
+
+        <div class="stat-card" onclick="switchTab('orders')">
+          <div class="stat-header">
+            <span class="stat-title">Ordini Da Evadere</span>
+            <div class="stat-icon" style="background: #fffbeb; color: #d97706;">⏳</div>
+          </div>
+          <div id="stat-pending-orders" class="stat-value">-</div>
+          <div id="stat-pending-amount" class="stat-sub">€ - in attesa</div>
+        </div>
+
+        <div class="stat-card" onclick="switchTab('orders')">
+          <div class="stat-header">
+            <span class="stat-title">Totale Ordini '26</span>
+            <div class="stat-icon" style="background: #faf5ff; color: #9333ea;">💶</div>
+          </div>
+          <div id="stat-orders" class="stat-value">-</div>
+          <div id="stat-turnover" class="stat-sub">Volume totale € -</div>
+        </div>
+
+        <div class="stat-card" onclick="switchTab('transports')">
+          <div class="stat-header">
+            <span class="stat-title">Trasporti '26</span>
+            <div class="stat-icon" style="background: #e0f2fe; color: #0284c7;">🚚</div>
+          </div>
+          <div id="stat-transports" class="stat-value">-</div>
+          <div id="stat-transports-sub" class="stat-sub">- previsti oggi</div>
+        </div>
+      </div>
+
+      <!-- Quick Access Section -->
+      <div style="margin-top: 10px;">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">Accessi Rapidi</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
+          <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="filterArticlesAndSwitch('available')">
+            🟢 Articoli Disponibili
+          </button>
+          <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="filterArticlesAndSwitch('out_of_stock')">
+            🔴 Articoli Esauriti
+          </button>
+          <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="filterOrdersAndSwitch('N')">
+            ⏳ Ordini Da Evadere
+          </button>
+          <button class="btn btn-secondary" style="padding: 12px; font-size: 0.85rem;" onclick="switchTab('transports'); setTransportDateFilter('today');">
+            🚚 Consegne Oggi
+          </button>
+        </div>
+      </div>
+
+      <!-- Recent Orders Section -->
+      <div style="margin-top: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="font-size: 1rem; font-weight: 700;">Ultimi Ordini Registrati</h3>
+          <a href="javascript:void(0)" onclick="switchTab('orders')" style="font-size: 0.82rem; color: var(--primary); text-decoration: none; font-weight: 600;">Vedi tutti →</a>
+        </div>
+        <div id="dashboard-recent-orders" class="card-list">
+          <div class="loading-spinner">Caricamento ordini...</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 2: CLIENTI -->
+    <!-- ============================================================ -->
+    <section id="tab-clients" class="tab-content" style="display: none;">
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="clients-search" class="search-input" placeholder="Cerca per Ragione Sociale, Città, Email, Agente, Codice..." oninput="onClientsSearch(this.value)">
+        <button id="clients-clear" class="search-clear-btn" onclick="clearClientsSearch()">✕</button>
+      </div>
+
+      <!-- Filters: Agent & Province -->
+      <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 150px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">👤 AGENTE</label>
+          <select id="clients-agent-filter" class="form-input" style="padding: 8px 10px; font-size: 0.85rem;" onchange="onClientsFilterChange()">
+            <option value="ALL">Tutti gli agenti</option>
+          </select>
+        </div>
+        <div style="flex: 1; min-width: 140px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">📍 PROVINCIA</label>
+          <select id="clients-province-filter" class="form-input" style="padding: 8px 10px; font-size: 0.85rem;" onchange="onClientsFilterChange()">
+            <option value="ALL">Tutte le province</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: flex-end;">
+          <button class="btn btn-secondary btn-sm" onclick="resetClientsFilters()" style="padding: 8px 12px; height: 38px;" title="Azzera filtri">
+            Ripristina
+          </button>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span id="clients-count-badge" class="badge badge-gray">0 clienti</span>
+      </div>
+
+      <div id="clients-list" class="card-list">
+        <div class="loading-spinner">Caricamento clienti...</div>
+      </div>
+      
+      <div id="clients-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;"></div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 3: ARTICOLI & LISTINO -->
+    <!-- ============================================================ -->
+    <section id="tab-articles" class="tab-content" style="display: none;">
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="articles-search" class="search-input" placeholder="Cerca Codice Articolo, Descrizione..." oninput="onArticlesSearch(this.value)">
+        <button id="articles-clear" class="search-clear-btn" onclick="clearArticlesSearch()">✕</button>
+      </div>
+
+      <!-- Filter Pills -->
+      <div class="filter-pills">
+        <button class="pill active" data-filter="all" onclick="setArticleFilter('all')">Tutti</button>
+        <button class="pill" data-filter="available" onclick="setArticleFilter('available')">🟢 Disponibili</button>
+        <button class="pill" data-filter="low_stock" onclick="setArticleFilter('low_stock')">🟡 Sottoscorta (≤50)</button>
+        <button class="pill" data-filter="out_of_stock" onclick="setArticleFilter('out_of_stock')">🔴 Esauriti</button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span id="articles-count-badge" class="badge badge-gray">0 articoli</span>
+      </div>
+
+      <div id="articles-list" class="card-list">
+        <div class="loading-spinner">Caricamento articoli...</div>
+      </div>
+
+      <div id="articles-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;"></div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 4: ORDINI -->
+    <!-- ============================================================ -->
+    <section id="tab-orders" class="tab-content" style="display: none;">
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="orders-search" class="search-input" placeholder="Cerca per Cliente, Riferimento, Numero Ordine..." oninput="onOrdersSearch(this.value)">
+        <button id="orders-clear" class="search-clear-btn" onclick="clearOrdersSearch()">✕</button>
+      </div>
+
+      <!-- Filter Pills -->
+      <div class="filter-pills">
+        <button class="pill active" data-order-filter="all" onclick="setOrderFilter('all')">Tutti</button>
+        <button class="pill" data-order-filter="N" onclick="setOrderFilter('N')">⏳ Da Evadere</button>
+        <button class="pill" data-order-filter="S" onclick="setOrderFilter('S')">✅ Evasi</button>
+        <button class="pill" data-order-filter="P" onclick="setOrderFilter('P')">🟡 Parziali</button>
+      </div>
+
+      <!-- Agent Filter for Orders -->
+      <div style="display: flex; gap: 10px; margin-bottom: 12px; align-items: flex-end; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px;">👤 FILTRA PER AGENTE</label>
+          <select id="orders-agent-filter" class="form-input" style="padding: 8px 10px; font-size: 0.85rem;" onchange="onOrdersAgentChange()">
+            <option value="ALL">Tutti gli agenti</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: flex-end;">
+          <button class="btn btn-secondary btn-sm" onclick="resetOrdersAgentFilter()" style="padding: 8px 12px; height: 38px;" title="Mostra tutti gli agenti">
+            Tutti gli Agenti
+          </button>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+        <span id="orders-count-badge" class="badge badge-gray">0 ordini</span>
+        <span id="orders-total-amount-badge" class="badge badge-green" style="font-weight: 700;">Tot: € 0,00</span>
+      </div>
+
+      <div id="orders-list" class="card-list">
+        <div class="loading-spinner">Caricamento ordini...</div>
+      </div>
+
+      <div id="orders-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;"></div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 5: TRASPORTI & CONSEGNE -->
+    <!-- ============================================================ -->
+    <section id="tab-transports" class="tab-content" style="display: none;">
+      <div class="search-box">
+        <span class="search-icon-left">🔍</span>
+        <input type="text" id="transports-search" class="search-input" placeholder="Cerca per cliente, comune, vettore, note..." oninput="onTransportsSearch(this.value)">
+        <button id="transports-clear" class="search-clear-btn" onclick="clearTransportsSearch()">✕</button>
+      </div>
+
+      <!-- Date Selection Controls: Pills & Specific Date Picker -->
+      <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px;">
+        <div class="filter-pills" style="margin-bottom: 0;">
+          <button class="pill active" data-date="all" onclick="setTransportDateFilter('all')">Tutti</button>
+          <button class="pill" data-date="today" onclick="setTransportDateFilter('today')">📅 Oggi</button>
+          <button class="pill" data-date="upcoming" onclick="setTransportDateFilter('upcoming')">⏳ Da Spedire / Prossimi</button>
+          <button class="pill" data-date="past" onclick="setTransportDateFilter('past')">📜 Storico</button>
+        </div>
+
+        <!-- Exact Date Picker Input -->
+        <div style="display: flex; align-items: center; gap: 6px; background: var(--bg-card); padding: 4px 10px; border-radius: var(--radius-md); border: 1px solid var(--border);">
+          <label for="transports-date-picker" style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); white-space: nowrap;">📅 Scegli data:</label>
+          <input type="date" id="transports-date-picker" class="form-input" style="padding: 4px 8px; font-size: 0.82rem; width: auto; border: none; background: transparent;" onchange="onTransportDatePickerChange(this.value)">
+          <button id="transports-date-clear-btn" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 0.75rem; display: none;" onclick="clearTransportDatePicker()" title="Cancella data scelta">✕</button>
+        </div>
+      </div>
+
+      <!-- Carrier Filter Dropdown & Counts -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <span id="transports-count-badge" class="badge badge-gray">0 trasporti</span>
+        <select id="transports-carrier-filter" class="form-input" style="width: auto; padding: 6px 12px; font-size: 0.82rem;" onchange="onTransportsCarrierChange()">
+          <option value="ALL">Tutti i vettori</option>
+        </select>
+      </div>
+
+      <div id="transports-list" class="card-list">
+        <div class="loading-spinner">Caricamento trasporti...</div>
+      </div>
+      
+      <div id="transports-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;"></div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 6: AMMINISTRAZIONE & CARICAMENTO EXCEL -->
+    <!-- ============================================================ -->
+    <section id="tab-admin" class="tab-content" style="display: none;">
+      
+      <!-- Direct Excel Upload Card -->
+      <div class="admin-card">
+        <div class="admin-card-title">
+          <span>📁</span>
+          <span>Caricamento Diretto File Excel</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+          Seleziona uno o più file Excel dal tuo computer per aggiornare immediatamente il database (i codici interni verranno automaticamente filtrati).
+        </p>
+
+        <form id="upload-excel-form" onsubmit="handleExcelUpload(event)">
+          <div class="file-drop-grid">
+            <div class="file-drop-box" id="drop-anagra">
+              <input type="file" id="file-anagra" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-anagra', 'Tab1')">
+              <div class="file-label-title">👥 Clienti (Tab1.xlsx)</div>
+              <div class="file-label-desc">Trascina Tab1.xlsx o ANAGRA</div>
+              <div class="file-selected-name" id="name-anagra"></div>
+            </div>
+
+            <div class="file-drop-box" id="drop-artico">
+              <input type="file" id="file-artico" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-artico', 'ARTICO')">
+              <div class="file-label-title">📦 Magazzino (ARTICO)</div>
+              <div class="file-label-desc">Trascina o seleziona ARTICO.xlsx</div>
+              <div class="file-selected-name" id="name-artico"></div>
+            </div>
+
+            <div class="file-drop-box" id="drop-seor">
+              <input type="file" id="file-seor" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-seor', 'SEOR')">
+              <div class="file-label-title">📋 Ordini 2026 (SEOR)</div>
+              <div class="file-label-desc">Trascina o seleziona SEOR.xlsx</div>
+              <div class="file-selected-name" id="name-seor"></div>
+            </div>
+
+            <div class="file-drop-box" id="drop-listino">
+              <input type="file" id="file-listino" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-listino', 'LISTINO')">
+              <div class="file-label-title">🏷️ Nuovo Listino Prezzi</div>
+              <div class="file-label-desc">Trascina Listino May 2026</div>
+              <div class="file-selected-name" id="name-listino"></div>
+            </div>
+
+            <div class="file-drop-box" id="drop-trasporti">
+              <input type="file" id="file-trasporti" accept=".xlsx,.xls" onchange="updateFileSelection(this, 'drop-trasporti', 'TRASPORTI')">
+              <div class="file-label-title">🚚 Trasporti e Consegne</div>
+              <div class="file-label-desc">Trascina TRASPORTI_2024.xlsx</div>
+              <div class="file-selected-name" id="name-trasporti"></div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button type="submit" id="upload-btn" class="btn btn-primary" style="padding: 10px 20px;">
+              <span id="upload-icon">⬆️</span>
+              <span>Carica ed Elabora File Selezionati</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="resetFileSelections()">
+              Azzera Selezione
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Password Management Card -->
+      <div class="admin-card">
+        <div class="admin-card-title">
+          <span>🔐</span>
+          <span>Gestione Password di Accesso</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
+          Modifica la password con cui accedono i colleghi/agenti o la tua password di amministratore.
+        </p>
+
+        <form onsubmit="handlePasswordChange(event)" style="max-width: 500px;">
+          <div class="form-group">
+            <label class="form-label">Password Generale App (per Agenti e Colleghi)</label>
+            <div style="position: relative;">
+              <input type="password" id="input-new-app-pwd" class="form-input" placeholder="Nuova password agenti..." required>
+              <button type="button" class="login-toggle-pwd" onclick="togglePasswordVisibility('input-new-app-pwd')">👁️</button>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+              Password attuale: <strong id="current-app-pwd-display">-</strong>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 18px;">
+            <label class="form-label">Password Amministratore (per questa schermata)</label>
+            <div style="position: relative;">
+              <input type="password" id="input-new-admin-pwd" class="form-input" placeholder="Lascia vuoto per non cambiare...">
+              <button type="button" class="login-toggle-pwd" onclick="togglePasswordVisibility('input-new-admin-pwd')">👁️</button>
+            </div>
+          </div>
+
+          <button type="submit" id="pwd-save-btn" class="btn btn-primary" style="margin-top: 10px; padding: 10px 20px;">
+            💾 Salva Nuove Password
+          </button>
+        </form>
+      </div>
+
+      <!-- Sync Logs Card -->
+      <div class="admin-card">
+        <div class="admin-card-title">
+          <span>📜</span>
+          <span>Storico Aggiornamenti e Sincronizzazioni</span>
+        </div>
+        <div id="admin-sync-logs" class="card-list">
+          <div class="loading-spinner">Caricamento log...</div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: DETTAGLIO CLIENTE -->
+  <!-- ============================================================ -->
+  <div id="modal-client" class="modal-overlay" onclick="closeClientModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <h2 id="modal-client-name" style="font-size: 1.15rem; font-weight: 800;">Ragione Sociale</h2>
+          <span id="modal-client-code" class="badge badge-blue">Codice</span>
+        </div>
+        <button class="modal-close" onclick="closeClientModal()">✕</button>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div id="modal-client-actions" style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;"></div>
+
+      <!-- Last Order Status Banner -->
+      <div id="modal-client-last-order-banner" style="margin-bottom: 16px;"></div>
+
+      <!-- Details -->
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">👤 Agente Assegnato</div>
+          <div id="modal-client-agent" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">📍 Provincia & Città</div>
+          <div id="modal-client-city" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">🏢 Indirizzo & CAP</div>
+          <div id="modal-client-address" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">✉️ Email</div>
+          <div id="modal-client-email" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">📞 Telefono</div>
+          <div id="modal-client-phone" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">📱 Cellulare</div>
+          <div id="modal-client-mobile" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">👤 Contatto / Rif.</div>
+          <div id="modal-client-contact" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Partita IVA / CF</div>
+          <div id="modal-client-vat" class="detail-value">-</div>
+        </div>
+      </div>
+
+      <!-- Turnover Trend Section for this Client -->
+      <div style="margin-top: 18px; background: #f8fafc; border-radius: 12px; padding: 14px; border: 1px solid #e2e8f0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="font-size: 0.95rem; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 6px;">
+            📊 Andamento Fatturato
+          </h3>
+          <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600;">Netto Merce (IVA escl.)</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; text-align: center;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">ANNO 2024</div>
+            <div id="modal-client-turnover-2024" style="font-size: 0.95rem; font-weight: 800; color: var(--text-color); margin-top: 4px;">-</div>
+          </div>
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; text-align: center; position: relative;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">ANNO 2025</div>
+            <div id="modal-client-turnover-2025" style="font-size: 0.95rem; font-weight: 800; color: var(--text-color); margin-top: 4px;">-</div>
+            <div id="modal-client-turnover-trend" style="margin-top: 2px;"></div>
+          </div>
+          <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; text-align: center;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; letter-spacing: 0.5px;">ANNO 2026</div>
+            <div id="modal-client-turnover-2026" style="font-size: 0.95rem; font-weight: 800; color: var(--primary, #2563eb); margin-top: 4px;">-</div>
+            <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 600;">ad oggi</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transports / Deliveries Section for this Client -->
+      <div style="margin-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="font-size: 0.95rem; font-weight: 700;">🚚 Consegne e Trasporti (<span id="modal-client-transports-count">0</span>)</h3>
+        </div>
+        <div id="modal-client-transports-list" class="card-list">
+          <div style="color: var(--text-muted); font-size: 0.85rem;">Nessun trasporto recente programmato.</div>
+        </div>
+      </div>
+
+      <!-- Orders Section for this Client -->
+      <div style="margin-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="font-size: 0.95rem; font-weight: 700;">Ordini Anno 2026 (<span id="modal-client-orders-count">0</span>)</h3>
+          <div style="text-align: right;">
+            <span id="modal-client-orders-total" class="badge badge-green">Tot: € 0,00</span>
+            <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 2px;">Netto merce (IVA escl.)</div>
+          </div>
+        </div>
+        <div id="modal-client-orders-list" class="card-list">
+          <div class="loading-spinner">Caricamento ordini...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: DETTAGLIO ARTICOLO -->
+  <!-- ============================================================ -->
+  <div id="modal-article" class="modal-overlay" onclick="closeArticleModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <span id="modal-art-code" class="badge badge-blue" style="font-size: 0.85rem;">Codice</span>
+          <h2 id="modal-art-desc" style="font-size: 1.1rem; font-weight: 800; margin-top: 4px;">Descrizione Articolo</h2>
+        </div>
+        <button class="modal-close" onclick="closeArticleModal()">✕</button>
+      </div>
+
+      <!-- Pricing Highlight -->
+      <div style="background: linear-gradient(135deg, #1e3a8a, #2563eb); color: white; padding: 16px; border-radius: var(--radius-md); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div>
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9;">Prezzo Listino Netto</div>
+          <div id="modal-art-price" style="font-size: 1.6rem; font-weight: 800;">€ 0,00</div>
+          <div style="font-size: 0.72rem; opacity: 0.85;">IVA Esclusa &bull; Rivenditore</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9;">Ultimo Prezzo Acquisto</div>
+          <div id="modal-art-cost" style="font-size: 1.4rem; font-weight: 800; opacity: 0.95;">€ 0,00</div>
+          <div style="font-size: 0.72rem; opacity: 0.85;">Costo di carico</div>
+        </div>
+      </div>
+
+      <!-- Stock Availability Matrix -->
+      <div class="detail-grid" style="margin-bottom: 16px;">
+        <div class="detail-item" style="border-left: 4px solid var(--primary);">
+          <div class="detail-label">Disponibilità Netta</div>
+          <div id="modal-art-disp-netta" class="detail-value" style="font-weight: 800; font-size: 1.15rem;">0 PZ</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Esistenza Fisica</div>
+          <div id="modal-art-esistenza" class="detail-value">0 PZ</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Impegnato Clienti</div>
+          <div id="modal-art-impegnato" class="detail-value">0 PZ</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Ordinato a Fornitori</div>
+          <div id="modal-art-ordinato" class="detail-value">0 PZ</div>
+        </div>
+      </div>
+
+      <!-- Secondary Info -->
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">Unità di Misura</div>
+          <div id="modal-art-um" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">Codice Alternativo</div>
+          <div id="modal-art-alt" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">A Listino</div>
+          <div id="modal-art-alistino" class="detail-value">-</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">In Esaurimento</div>
+          <div id="modal-art-esaurim" class="detail-value">-</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MOBILE BOTTOM NAVIGATION -->
+  <!-- ============================================================ -->
+  <nav class="mobile-nav">
+    <button class="mobile-nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="clients" onclick="switchTab('clients')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Clienti</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="articles" onclick="switchTab('articles')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      <span>Articoli</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="orders" onclick="switchTab('orders')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <span>Ordini</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="transports" onclick="switchTab('transports')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+      <span>Trasporti</span>
+    </button>
+    <button id="mobile-nav-admin" class="mobile-nav-item" data-tab="admin" onclick="switchTab('admin')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Admin</span>
+    </button>
+  </nav>
+
+  <!-- App Javascript -->
+  <script src="/static/app.js?v=4.5"></script>
+</body>
+</html>

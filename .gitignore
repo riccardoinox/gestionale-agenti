@@ -1,0 +1,29 @@
+# Database & business data
+gestionale.db
+gestionale.db*
+*.db
+*.sqlite
+*.sqlite3
+
+# Excel sheets with sensitive customer / price / order data
+*.xlsx
+*.xls
+*.csv
+
+# Python caches & virtualenvs
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Local logs and temporary files
+*.log
+_temp_drive_sync/
+downloads_test/
+LINK_ONLINE.txt
+cloudflared.exe
+App Inoxtubi/
